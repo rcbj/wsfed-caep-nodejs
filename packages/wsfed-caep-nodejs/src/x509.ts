@@ -6,7 +6,7 @@
 // the certificate only as a container for the public key, exchanged in metadata, so self-signed is the
 // norm: nobody validates its chain. The DER is written by hand below; it is small.
 
-import { generateKeyPairSync, randomBytes, sign, X509Certificate } from 'node:crypto';
+import { createHash, generateKeyPairSync, randomBytes, sign, X509Certificate } from 'node:crypto';
 
 function length(n: number): Buffer {
   if (n < 0x80) return Buffer.from([n]);
@@ -39,6 +39,22 @@ function time(d: Date): Buffer {
   return d.getUTCFullYear() < 2050 ? tlv(0x17, Buffer.from(iso.slice(2), 'ascii')) : tlv(0x18, Buffer.from(iso, 'ascii'));
 }
 
+/** The bytes of a DER SubjectPublicKeyInfo's subjectPublicKey BIT STRING, without its unused-bits byte. */
+function subjectPublicKeyBits(spki: Buffer): Buffer {
+  const header = (at: number): { body: number; end: number } => {
+    const first = spki[at + 1]!;
+    if (first < 0x80) return { body: at + 2, end: at + 2 + first };
+    const n = first & 0x7f;
+    let len = 0;
+    for (let i = 0; i < n; i += 1) len = len * 256 + spki[at + 2 + i]!;
+    return { body: at + 2 + n, end: at + 2 + n + len };
+  };
+  const outer = header(0);
+  const algorithm = header(outer.body);
+  const bits = header(algorithm.end);
+  return spki.subarray(bits.body + 1, bits.end);
+}
+
 const name = (cn: string) => seq(set(seq(oid('2.5.4.3'), tlv(0x0c, Buffer.from(cn, 'utf8')))));
 const SHA256_RSA = seq(oid('1.2.840.113549.1.1.11'), Buffer.from([0x05, 0x00]));
 
@@ -67,7 +83,16 @@ export function createSelfSignedKeyPair(options: KeyPairOptions): KeyPair {
   serial[0] = serial[0]! & 0x7f;
   const notBefore = new Date(Date.now() - 60_000);
   const notAfter = new Date(notBefore.getTime() + days * 86_400_000);
+  const spki = publicKey.export({ type: 'spki', format: 'der' });
+  // The key identifier (RFC 5280 4.2.1.2, method 1): SHA-1 of the subjectPublicKey BIT STRING's bytes,
+  // the last element of the SubjectPublicKeyInfo. A truststore holding two certificates with the same
+  // name tells them apart by it: without it, a self-signed certificate is matched to an anchor by name
+  // alone, and two of them called CN=localhost:3000 shadow each other (rcbj/iya-sts#1242).
+  const keyId = createHash('sha1').update(subjectPublicKeyBits(spki)).digest();
   const extensions = tlv(0xa3, seq(
+    // subjectKeyIdentifier, and authorityKeyIdentifier naming the same key: it issued itself.
+    seq(oid('2.5.29.14'), tlv(0x04, tlv(0x04, keyId))),
+    seq(oid('2.5.29.35'), tlv(0x04, seq(tlv(0x80, keyId)))),
     // basicConstraints, critical: not a CA.
     seq(oid('2.5.29.19'), tlv(0x01, Buffer.from([0xff])), tlv(0x04, seq())),
     // keyUsage, critical: digitalSignature and keyEncipherment.
@@ -80,7 +105,7 @@ export function createSelfSignedKeyPair(options: KeyPairOptions): KeyPair {
     name(options.commonName),
     seq(time(notBefore), time(notAfter)),
     name(options.commonName),
-    publicKey.export({ type: 'spki', format: 'der' }),
+    spki,
     extensions,
   );
   const signature = sign('sha256', tbs, privateKey);
