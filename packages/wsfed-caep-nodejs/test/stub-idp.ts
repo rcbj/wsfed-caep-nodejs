@@ -67,6 +67,10 @@ export interface AssertionOptions {
   sessionIndex?: string;
   /** Extra AttributeStatement content (e.g. an EncryptedAttribute). */
   extraAttributes?: string;
+  /** A bare bearer SubjectConfirmation, no SubjectConfirmationData: iya-sts's WS-Federation SAML 2.0 token. */
+  bareConfirmation?: boolean;
+  /** Leave NotOnOrAfter off the Conditions. */
+  noConditionsExpiry?: boolean;
 }
 
 const CLAIMS = 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims';
@@ -79,8 +83,10 @@ export function assertionXml(o: AssertionOptions = {}): { xml: string; id: strin
   const xml = `<saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="${aid}" Version="2.0" IssueInstant="${iso(0)}">`
     + `<saml:Issuer>${o.issuer ?? IDP_ENTITY}</saml:Issuer>`
     + `<saml:Subject><saml:NameID Format="urn:oasis:names:tc:SAML:2.0:nameid-format:persistent">${o.nameId ?? 'alice-1234'}</saml:NameID>`
-    + `<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData${recipient} NotOnOrAfter="${iso(o.notOnOrAfterMs ?? 300_000)}"${irt}/></saml:SubjectConfirmation></saml:Subject>`
-    + `<saml:Conditions NotBefore="${iso(-5000)}" NotOnOrAfter="${iso(o.notOnOrAfterMs ?? 300_000)}"><saml:AudienceRestriction><saml:Audience>${o.audience ?? REALM}</saml:Audience></saml:AudienceRestriction></saml:Conditions>`
+    + (o.bareConfirmation
+      ? '<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"/></saml:Subject>'
+      : `<saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData${recipient} NotOnOrAfter="${iso(o.notOnOrAfterMs ?? 300_000)}"${irt}/></saml:SubjectConfirmation></saml:Subject>`)
+    + `<saml:Conditions NotBefore="${iso(-5000)}"${o.noConditionsExpiry ? '' : ` NotOnOrAfter="${iso(o.notOnOrAfterMs ?? 300_000)}"`}><saml:AudienceRestriction><saml:Audience>${o.audience ?? REALM}</saml:Audience></saml:AudienceRestriction></saml:Conditions>`
     + `<saml:AttributeStatement><saml:Attribute Name="${CLAIMS}/nameidentifier"><saml:AttributeValue>urn:uuid:alice</saml:AttributeValue></saml:Attribute>`
     + `<saml:Attribute Name="${CLAIMS}/emailaddress" FriendlyName="mail"><saml:AttributeValue>alice@example.com</saml:AttributeValue></saml:Attribute>`
     + `<saml:Attribute Name="http://schemas.microsoft.com/ws/2008/06/identity/claims/role"><saml:AttributeValue>staff</saml:AttributeValue><saml:AttributeValue>admins</saml:AttributeValue></saml:Attribute>${o.extraAttributes ?? ''}</saml:AttributeStatement>`
