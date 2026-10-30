@@ -1,0 +1,25 @@
+{
+  "name": "wsfed-caep-nodejs-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/wsfed-caep-nodejs",
+    "demo"
+  ],
+  "scripts": {
+    "build": "npm run build -w packages/wsfed-caep-nodejs",
+    "test": "npm test -w packages/wsfed-caep-nodejs && node --test scripts/*.test.mjs scripts/*.test.ts",
+    "start": "node demo/server.ts",
+    "generate-keys": "node packages/wsfed-caep-nodejs/src/cli.ts generate-keys --config demo/wsfed.json",
+    "generate-metadata": "node packages/wsfed-caep-nodejs/src/cli.ts metadata --config demo/wsfed.json --out demo/generated/rp-metadata.xml",
+    "configure-iya-sts": "node scripts/configure-iya-sts.ts",
+    "version:print": "node scripts/version.mjs",
+    "version:check": "node scripts/version.mjs --check-manifests",
+    "version:sync": "node scripts/version.mjs --sync-manifests"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "license": "MIT",
+  "author": "Iya CyberSecurity Solutions, LLC"
+}
