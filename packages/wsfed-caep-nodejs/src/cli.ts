@@ -21,7 +21,7 @@ export const USAGE = `Usage:
       A new RSA key and a self-signed certificate, written where the configuration's privateKey and
       certificate point (or to --key and --cert). Refuses to replace existing files without --force.
       The key decrypts encrypted assertions and can authenticate the Shared Signals receiver (mutual
-      TLS); WS-Federation itself signs nothing. The common name defaults to the host of the realm.
+      TLS); WS-Federation itself signs nothing. The common name defaults to one naming the realm.
 
   wsfed-caep-nodejs metadata --config <wsfed.json> [--out <file>]
       This relying party's federation metadata, from the configuration (and its certificate, when it
@@ -65,13 +65,9 @@ export function keyPaths(args: Args): { key: string; cert: string; commonName: s
     };
     key ??= at(raw.privateKey, 'privateKey');
     cert ??= at(raw.certificate, 'certificate');
-    if (!commonName && raw.realm) {
-      try {
-        commonName = new URL(raw.realm).host || raw.realm;
-      } catch {
-        commonName = raw.realm;
-      }
-    }
+    // Named after this relying party, not its host: two applications on one host would otherwise make two
+    // certificates with one name, and a truststore holding both can match the wrong one (rcbj/iya-sts#1242).
+    if (!commonName && raw.realm) commonName = `wsfed-caep-nodejs relying party ${raw.realm}`.slice(0, 64);
   }
   if (!key || !cert) throw new Error(`generate-keys needs --config, or --key and --cert\n\n${USAGE}`);
   return { key: resolve(key), cert: resolve(cert), commonName: commonName ?? 'wsfed-caep-nodejs relying party' };
