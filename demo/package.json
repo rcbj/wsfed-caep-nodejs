@@ -1,0 +1,14 @@
+{
+  "name": "wsfed-caep-nodejs-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A traditional server-rendered web application that signs people in with WS-Federation (SAML 2.0 assertions) through wsfed-caep-nodejs, and is signed out by CAEP and RISC events.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.ts"
+  },
+  "dependencies": {
+    "wsfed-caep-nodejs": "*"
+  },
+  "license": "MIT"
+}

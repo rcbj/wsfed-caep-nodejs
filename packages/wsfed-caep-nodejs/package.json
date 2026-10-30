@@ -1,0 +1,68 @@
+{
+  "name": "wsfed-caep-nodejs",
+  "version": "0.1.0",
+  "description": "Server-side WS-Federation relying party for Node.js: the passive requestor profile (wsignin1.0, wsignout1.0, wsignoutcleanup1.0) with SAML 2.0 assertions validated strictly, and a CAEP and RISC (Shared Signals) receiver that ends sessions. TypeScript, usable from JavaScript.",
+  "homepage": "https://rcbj.github.io/wsfed-caep-nodejs/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rcbj/wsfed-caep-nodejs.git",
+    "directory": "packages/wsfed-caep-nodejs"
+  },
+  "bugs": {
+    "url": "https://github.com/rcbj/wsfed-caep-nodejs/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "wsfed-caep-nodejs": "./dist/cli.js"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "docs",
+    "examples",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.ts test/*.test.mjs",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "ws-federation",
+    "wsfed",
+    "wsignin",
+    "relying-party",
+    "saml2",
+    "sso",
+    "caep",
+    "risc",
+    "shared-signals",
+    "authentication"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.8.15",
+    "xml-crypto": "^6.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "7.0.2"
+  },
+  "author": "Iya CyberSecurity Solutions, LLC",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

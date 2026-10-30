@@ -1,0 +1,12 @@
+{
+  "realm": "http://localhost:3000/",
+  "replyUrl": "http://localhost:3000/wsfed",
+  "privateKey": "generated/rp.key",
+  "certificate": "generated/rp.crt",
+  "idpMetadata": "generated/idp-metadata.xml",
+  "idpCa": "generated/idp-ca.pem",
+  "ssf": {
+    "transmitter": "https://localhost:8081",
+    "pollIntervalMs": 3000
+  }
+}

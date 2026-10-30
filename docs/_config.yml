@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 Iya CyberSecurity Solutions, LLC
+# SPDX-License-Identifier: MIT
+#
+# Jekyll configuration for the wsfed-caep-nodejs documentation site, laid out like saml2-sp-nodejs's and
+# iya-sts's: the `minima` theme GitHub Pages ships, with a sidebar drawn from _data/navigation.yml.
+# ../.github/workflows/pages.yml builds it. The guide, the signals page and the reference are the
+# package's own files (packages/wsfed-caep-nodejs/docs/*.md and README.md), copied in by the workflow.
+title: wsfed-caep-nodejs
+tagline: documentation
+description: >-
+  A WS-Federation relying party for server-side Node.js applications: wsignin1.0 with SAML 2.0
+  assertions validated strictly, sign-out and cleanup, and a CAEP and RISC receiver that ends sessions.
+theme: minima
+show_excerpts: false
+baseurl: "/wsfed-caep-nodejs"
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+plugins:
+  - jekyll-relative-links
