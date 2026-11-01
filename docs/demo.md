@@ -43,7 +43,7 @@ One browser can hold several signed-in people. The account bar at the top of a s
 
 ## Shared Signals: signed out by the identity provider
 
-`demo/wsfed.json`'s `ssf` block makes the demo a CAEP and RISC receiver. It keeps one poll stream at iya-sts, polls it every three seconds, and authenticates with mutual TLS using the relying party's own key pair.
+`demo/wsfed.json`'s `ssf` block makes the demo a CAEP and RISC receiver, unless `"signals": false`. The default is on. With signals off, the demo does not start a receiver and does not require transmitter metadata, even if `ssf` is present. Sign-in is unchanged. When signals are on, it keeps one poll stream at iya-sts, polls it every three seconds, and authenticates with mutual TLS using the relying party's own key pair.
 
 Once you're signed in, the page has two tabs. **Identity** shows what the assertion said. **CAEP & RISC events** shows the stream (the receiver's state, the stream and its poll endpoint, every event type it delivers, which of them end the session, and a **Request verification event** button) and the event log: every CAEP and RISC event about this session or its person, newest first, with what the demo did, the subject and every member the event carried.
 
