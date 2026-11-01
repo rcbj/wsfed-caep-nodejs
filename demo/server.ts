@@ -13,8 +13,7 @@
 //   GET  /                to the first account's page, or the sign-in buttons when nobody is signed in
 //   GET  /u/<a>/          that account's page; ?tab=events shows its CAEP and RISC events and the stream
 //   GET  /login           to the identity provider with wa=wsignin1.0, asking for a SAML 2.0 assertion;
-//                         ?mfa=1 demands two factors (wauth); ?add=1 adds another person (wfresh=0);
-//                         ?account=<a> signs that person in again (wfresh=0)
+//                         ?add=1 adds another person (wfresh=0); ?account=<a> signs that person in again (wfresh=0)
 //   POST /wsfed           the reply URL: the sign-in response (wa=wsignin1.0, wresult, wctx)
 //   GET  /wsfed           the reply URL: the identity provider's wa=wsignoutcleanup1.0, loaded as an image
 //   GET  /FederationMetadata/2007-06/FederationMetadata.xml   this relying party's federation metadata
@@ -327,8 +326,6 @@ ${body}
 `;
 }
 
-const MULTIPLE_AUTHN = 'http://schemas.microsoft.com/claims/multipleauthn';
-
 type Tab = 'identity' | 'events';
 
 function tabs(base: string, active: Tab, count = 0): string {
@@ -435,8 +432,7 @@ ${problem ? `<p class="problem">${esc(problem)}</p>` : ''}
 <p>The passive requestor profile: this application sends the browser to ${esc(rp?.idp.entityId ?? 'the identity provider')} with
 <code>wa=wsignin1.0</code>, asking for a <strong>SAML 2.0 assertion</strong>, and the identity provider posts it back to the reply URL
 inside a WS-Trust RequestSecurityTokenResponse.</p>
-<p class="buttons"><a class="button primary" href="/login">Sign in</a>
-<a class="button" href="/login?mfa=1">Sign in with two factors (wauth)</a></p>
+<p class="buttons"><a class="button primary" href="/login">Sign in</a></p>
 <p><a href="/FederationMetadata/2007-06/FederationMetadata.xml">This relying party's federation metadata</a></p>`);
 }
 
@@ -567,7 +563,6 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     const request = rp.login({
       relayState: '/',
       ...(add || again ? { forceAuthn: true } : {}),
-      ...(url.searchParams.get('mfa') === '1' ? { authenticationMethod: MULTIPLE_AUTHN } : {}),
     });
     // Keep the last few outstanding ids, so two tabs signing in at once both succeed.
     const before = unseal<Pending>(cookies(req).wsfed_pending)?.ids ?? [];

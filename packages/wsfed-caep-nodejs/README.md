@@ -72,10 +72,21 @@ const { RelyingParty } = require('wsfed-caep-nodejs');       // CommonJS, Node 2
 
 | Message | | This library |
 |---|---|---|
-| `wsignin1.0` request | The browser is redirected to the identity provider's PassiveRequestorEndpoint with `wtrealm`, `wreply`, `wctx`, `wct`, and `wreq` asking for `urn:oasis:names:tc:SAML:2.0:assertion`. Optionally `wfresh` (`forceAuthn` is `wfresh=0`), `wauth`, `whr`. | `rp.login()` |
+| `wsignin1.0` request | The browser is redirected to the identity provider's PassiveRequestorEndpoint with `wtrealm`, `wreply`, `wctx`, `wct`, and `wreq` asking for `urn:oasis:names:tc:SAML:2.0:assertion`. Optionally `wfresh` (`forceAuthn` is `wfresh=0`), `wauth` (`authenticationMethod`), `whr`. | `rp.login()` |
 | `wsignin1.0` response | The identity provider's page POSTs `wa`, `wresult` (a WS-Trust RequestSecurityTokenResponse around the assertion) and `wctx` to the reply URL. | `rp.handleReply()` |
 | `wsignout1.0` | The browser is sent to the identity provider to end its session there. | `rp.logout({ reply })` |
 | `wsignoutcleanup1.0` | The identity provider loads the reply URL as an image, so the relying party ends its session. | `rp.isSignOutCleanup()` |
+
+**`wauth`.** Pass it as `authenticationMethod` to `login()`. The value is one URI. Two factors is `http://schemas.microsoft.com/claims/multipleauthn`:
+
+```ts
+rp.login({
+  relayState: '/',
+  authenticationMethod: 'http://schemas.microsoft.com/claims/multipleauthn',
+});
+```
+
+The [guide](docs/guide.md#asking-for-a-sign-in-method-wauth) walks through the call. iya-sts treats a demand the session does not already meet as a step-up, and the URIs it accepts are on its [WS-Federation page](https://rcbj.github.io/iya-sts/configure-ws-federation.html#wauth-demand-a-sign-in-method).
 
 The response is read in either WS-Trust shape: a February 2005 `RequestSecurityTokenResponse` (what AD FS and iya-sts send by default), or a WS-Trust 1.3 `RequestSecurityTokenResponseCollection` holding one. `wresultptr` is refused: a reference is never dereferenced.
 
