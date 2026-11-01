@@ -56,7 +56,20 @@ app.get('/login', (req, res) => {
 
 `sign()` is your application's cookie signing (`cookie-parser` with a secret, or an HMAC). The id is not a secret, but a cookie the browser could replace would let it choose which request a response answers.
 
-`login()` takes the protocol's options: `forceAuthn` (`wfresh=0`, authenticate again even with a session), `freshness` (`wfresh` in minutes), `authenticationMethod` (`wauth`, e.g. `http://schemas.microsoft.com/claims/multipleauthn` for two factors), and `homeRealm` (`whr`).
+`login()` takes the protocol's options: `forceAuthn` (`wfresh=0`, authenticate again even with a session), `freshness` (`wfresh` in minutes), `authenticationMethod` (`wauth`), and `homeRealm` (`whr`).
+
+### Asking for a sign-in method (`wauth`)
+
+`authenticationMethod` is sent as the `wauth` query parameter: one URI naming the method the identity provider must use. The library does not interpret the URI.
+
+```ts
+const request = rp.login({
+  relayState: '/',
+  authenticationMethod: 'http://schemas.microsoft.com/claims/multipleauthn',
+});
+```
+
+`http://schemas.microsoft.com/claims/multipleauthn` asks for two factors. On iya-sts a `wauth` the current session does not already meet is a step-up: the person signs in again with that method required, and the assertion reports what happened. iya-sts accepts one URI and refuses a value it does not know. The URIs it honours, and what meets each, are on [Configuring WS-Federation](https://rcbj.github.io/iya-sts/configure-ws-federation.html#wauth-demand-a-sign-in-method).
 
 ## 4. The reply URL
 
