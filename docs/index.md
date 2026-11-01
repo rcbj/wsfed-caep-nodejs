@@ -11,7 +11,7 @@ A **WS-Federation relying party** for **server-side** Node.js applications: the 
 - **Strict validation**: the assertion's signature always required, verified only against the identity provider's metadata certificates and read from what was signed (no signature wrapping); audience, recipient, time window, `wctx` correlation, and each assertion accepted once.
 - **Encryption**: `EncryptedAssertion`, AD FS's bare `EncryptedData`, `EncryptedID` and `EncryptedAttribute` decrypted with `node:crypto` (AES-GCM/CBC, RSA-OAEP; PKCS#1 v1.5 refused).
 - **Federation metadata both ways**: this relying party's written from its configuration, the identity provider's read from a file or a URL.
-- **CAEP and RISC**: an OpenID Shared Signals receiver that ends the application's sessions when the identity provider revokes a session or disables an account, whether or not the browser is open.
+- **CAEP and RISC**: an OpenID Shared Signals receiver that ends the application's sessions when the identity provider revokes a session or disables an account, whether or not the browser is open. `"signals": false` turns this off. The default is on. Sign-in is unchanged. The relying party does not start a receiver; the application, and the demo, should not start one when the flag is false.
 
 It is TypeScript and works from JavaScript, needs no web framework, and depends on [`xml-crypto`](https://github.com/node-saml/xml-crypto) and [`@xmldom/xmldom`](https://github.com/xmldom/xmldom) only. It is built and tested against [iya-sts](https://rcbj.github.io/iya-sts/ws-federation.html)'s WS-Federation identity provider.
 

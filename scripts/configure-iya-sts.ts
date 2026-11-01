@@ -20,12 +20,14 @@
  *   3a. turns on `authn.multipleAccounts` for the realm: the demo signs several people in to one browser,
  *      and with the setting off, iya-sts would END one person's session when the next signs in there
  *      (and send CAEP session-revoked for it, which ends that person's account here);
- *   3b. with an `ssf` block in the configuration, the Shared Signals receiver's access, by MUTUAL TLS
+ *   3b. with an `ssf` block and `signals` not false, the Shared Signals receiver's access, by MUTUAL TLS
  *      with the relying party's own certificate (no token, no secret): the application declares
  *      `ssf.manage` and is made a member of the SSF_MANAGE role, the certificate is installed as a
  *      client trust anchor (`/admin-api/tls/trust/add`) and stored on the application entry
  *      (`/admin-api/applications/add-certificate`, iya-sts #1227), which is what makes the handshake's
- *      certificate this application at `/ssf/*`;
+ *      certificate this application at `/ssf/*`. `"signals": false` skips this: CAEP and RISC are off,
+ *      SSF roles are not registered, and transmitter metadata is not required. Sign-in registration is
+ *      unchanged. The default is on.
  *   4. iya-sts's federation METADATA for this relying party (`/wsfed/metadata/<realm>`), checked with the
  *      library's own reader and written where the configuration's `idpMetadata` points, so the library
  *      learns the identity provider (entityID, passive requestor endpoint, signing certificate) from it;
@@ -130,12 +132,33 @@ export interface DemoFiles {
   idpMetadata: string;
   idpCa: string | undefined;
   rpMetadata: string;
-  /** The Shared Signals transmitter, when the configuration has an `ssf` block. */
+  /** The Shared Signals transmitter, when the configuration has an `ssf` block. Not used when `signals` is false. */
   ssfTransmitter: string | undefined;
+  /**
+   * Present only when CAEP and RISC are off. Omitted when on. Registration tests `signals !== false`
+   * and then skips SSF roles even if `ssfTransmitter` is set.
+   */
+  signals?: false;
+}
+
+/** `signals` defaults to on. Only `false` turns CAEP and RISC off; any other set value is an error. */
+function signalsOff(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== 'boolean') throw new Error('signals must be true or false');
+  return value === false;
 }
 
 export function filesOf(configPath: string): DemoFiles {
-  const raw = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, string | undefined> & { ssf?: { transmitter?: string } };
+  const raw = JSON.parse(readFileSync(configPath, 'utf8')) as {
+    realm?: string;
+    replyUrl?: string;
+    privateKey?: string;
+    certificate?: string;
+    idpMetadata?: string;
+    idpCa?: string;
+    signals?: unknown;
+    ssf?: { transmitter?: string };
+  };
   const base = dirname(configPath);
   const at = (p: string | undefined, what: string) => {
     if (!p || p.includes('-----BEGIN') || /^https?:/.test(p) || p.startsWith('<')) {
@@ -155,6 +178,7 @@ export function filesOf(configPath: string): DemoFiles {
     idpCa: raw.idpCa ? at(raw.idpCa, 'idpCa') : undefined,
     rpMetadata: resolve(dirname(key), 'rp-metadata.xml'),
     ssfTransmitter: raw.ssf?.transmitter,
+    ...(signalsOff(raw.signals) ? { signals: false as const } : {}),
   };
 }
 
@@ -189,7 +213,7 @@ export function planFor(files: DemoFiles, base: string, testUser: string) {
     { method: 'POST', path: `${base}/admin-api/config/set`, why: 'let one browser hold several accounts', body: MULTIPLE_ACCOUNTS },
     { method: 'GET', path: idpMetadataUrl(base, files.realm), body: undefined, why: `fetch the IdP metadata into ${files.idpMetadata}` },
   ];
-  if (files.ssfTransmitter) calls.splice(calls.length - 1, 0, ...ssfCalls(files, base, '<the RP certificate>'));
+  if (files.signals !== false && files.ssfTransmitter) calls.splice(calls.length - 1, 0, ...ssfCalls(files, base, '<the RP certificate>'));
   if (testUser) calls.push({ method: 'POST', path: `${base}/admin-api/users/create`, why: `create the test user ${testUser}`, body: { username: testUser } });
   return calls;
 }
@@ -364,8 +388,8 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   if (!multiple.body.ok) throw new Error(`setting authn.multipleAccounts was refused: ${JSON.stringify(multiple.body).slice(0, 300)}`);
   console.log('authn.multipleAccounts is on: one browser may hold several signed-in people.');
 
-  // 3b. The Shared Signals receiver's access.
-  if (files.ssfTransmitter) {
+  // 3b. The Shared Signals receiver's access. `"signals": false` does not register roles or read a transmitter.
+  if (files.signals !== false && files.ssfTransmitter) {
     const certificatePem = readFileSync(files.cert, 'utf8');
     for (const call of ssfCalls(files, base, certificatePem)) {
       const r = await api(call.path.slice(`${base}/admin-api`.length), call.body);

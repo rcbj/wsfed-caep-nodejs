@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 /**
  * wsfed-caep-nodejs: a server-side WS-Federation relying party that accepts SAML 2.0 assertions, and a
- * CAEP and RISC receiver that ends its sessions.
+ * CAEP and RISC receiver that ends its sessions. `"signals": false` turns the receiver off. The
+ * relying party does not start one itself; the default is on. Sign-in does not change.
  *
  * ```ts
  * import { RelyingParty } from 'wsfed-caep-nodejs';
