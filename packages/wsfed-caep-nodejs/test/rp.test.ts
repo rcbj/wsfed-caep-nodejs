@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { DOMParser } from '@xmldom/xmldom';
-import { RelyingParty, WsFedError, type WsFedConfig } from '../src/index.ts';
+import { RelyingParty, WsFedError, resolveConfig, type WsFedConfig } from '../src/index.ts';
 import {
   IDP_ENTITY, PASSIVE, REALM, REPLY, RP_CERT, RP_KEY, IDP_CERT, assertionXml, encrypt, idpMetadata, saml11Assertion,
   signXml, signedAssertion, wresult, type MetadataOptions,
@@ -43,6 +43,40 @@ describe('configuration and metadata', () => {
     await rejects(RelyingParty.create({ realm: REALM, replyUrl: REPLY, idpMetadata: idpMetadata(), wantAssertionsEncrypted: true }), 'config', /needs privateKey/);
     const keyless = await RelyingParty.create({ realm: REALM, replyUrl: REPLY, idpMetadata: idpMetadata() });
     assert.doesNotMatch(keyless.metadata(), /KeyDescriptor/);
+  });
+
+  it('omits signals when it is left out or true, and the configuration still resolves', () => {
+    const base = { realm: REALM, replyUrl: REPLY, idpMetadata: 'https://idp.example/FederationMetadata/2007-06/FederationMetadata.xml' };
+    const omitted = resolveConfig(base);
+    assert.equal(Object.hasOwn(omitted, 'signals'), false);
+    assert.equal(omitted.realm, REALM);
+    assert.equal(omitted.replyUrl, REPLY);
+    assert.equal(omitted.requestTokenType, true);
+    const on = resolveConfig({ ...base, signals: true });
+    assert.equal(Object.hasOwn(on, 'signals'), false);
+    assert.deepEqual(on, omitted);
+  });
+
+  it('records signals false and still resolves the WS-Federation fields', () => {
+    const base = { realm: REALM, replyUrl: REPLY, idpMetadata: 'https://idp.example/FederationMetadata/2007-06/FederationMetadata.xml' };
+    const off = resolveConfig({ ...base, signals: false });
+    assert.equal(off.signals, false);
+    const { signals, ...rest } = off;
+    assert.equal(signals, false);
+    assert.deepEqual(rest, resolveConfig(base));
+    assert.equal(off.realm, REALM);
+    assert.equal(off.replyUrl, REPLY);
+    assert.equal(off.idpMetadata, base.idpMetadata);
+  });
+
+  it('refuses a signals value that is not true or false', () => {
+    const base = { realm: REALM, replyUrl: REPLY, idpMetadata: 'https://idp.example/metadata' };
+    assert.throws(() => resolveConfig({ ...base, signals: 'no' as unknown as boolean }), (err: unknown) => {
+      assert.ok(err instanceof WsFedError);
+      assert.equal(err.code, 'config');
+      assert.equal(err.message, 'signals must be true or false');
+      return true;
+    });
   });
 
   it('reads the security token service role: its passive endpoint, token types and signing key', async () => {

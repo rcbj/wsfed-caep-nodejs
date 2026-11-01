@@ -126,6 +126,8 @@ app.get('/FederationMetadata/2007-06/FederationMetadata.xml', (req, res) =>
 
 A session at the application outlives a sign-out at the identity provider unless something tells it. `SignalsReceiver` is that something: it receives the identity provider's CAEP and RISC events and ends the matching sessions, whether or not the person's browser is open (see the [reference](../README.md#shared-signals-caep-and-risc)).
 
+The relying party does not start a receiver. Start one in the application, unless the configuration sets `"signals": false`. The default is on. When it is false, do not start `SignalsReceiver` and do not require transmitter metadata; test `rp.config.signals !== false`. Sign-in is unchanged. The demo follows that.
+
 ```ts
 const signals = new SignalsReceiver({
   transmitter: 'https://idp.example.com',

@@ -56,6 +56,29 @@ describe('configure-iya-sts', () => {
     assert.ok(!planFor(filesOf(config), 'https://localhost:8081', '').some((c) => c.path.endsWith('/applications/add-certificate')), 'no ssf block, no access');
   });
 
+  it('with signals false, does not register Shared Signals roles even when ssf is set', () => {
+    const off = join(dir, 'wsfed-signals-off.json');
+    writeFileSync(off, JSON.stringify({
+      ...JSON.parse(readFileSync(config, 'utf8')),
+      signals: false,
+      ssf: { transmitter: 'https://localhost:8081' },
+    }));
+    const files = filesOf(off);
+    assert.equal(files.signals, false);
+    assert.equal(files.ssfTransmitter, 'https://localhost:8081');
+    assert.equal(files.realm, 'http://localhost:3000/');
+    assert.equal(files.replyUrl, 'http://localhost:3000/wsfed');
+    assert.equal(planFor(files, 'https://localhost:8081', '').some((c) => c.path.endsWith('/applications/add-certificate')), false);
+    assert.equal(planFor(files, 'https://localhost:8081', '').some((c) => c.path.endsWith('/roles/add-member')), false);
+    const on = join(dir, 'wsfed-signals-on.json');
+    writeFileSync(on, JSON.stringify({ ...JSON.parse(readFileSync(config, 'utf8')), signals: true, ssf: { transmitter: 'https://localhost:8081' } }));
+    assert.equal(Object.hasOwn(filesOf(on), 'signals'), false);
+    assert.ok(planFor(filesOf(on), 'https://localhost:8081', '').some((c) => c.path.endsWith('/applications/add-certificate')));
+    const bad = join(dir, 'wsfed-signals-bad.json');
+    writeFileSync(bad, JSON.stringify({ ...JSON.parse(readFileSync(config, 'utf8')), signals: 'no' }));
+    assert.throws(() => filesOf(bad), /signals must be true or false/);
+  });
+
   it('keeps a realm\'s base and refuses any other path', () => {
     assert.deepEqual(realmOf('https://idp.test/realm/acme'), { origin: 'https://idp.test', base: 'https://idp.test/realm/acme' });
     assert.throws(() => realmOf('https://idp.test/wsfed'), /realm/);

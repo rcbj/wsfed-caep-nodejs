@@ -5,7 +5,8 @@
 // metadata); everything else the relying party needs is in that metadata. A WS-Federation sign-in request
 // is not signed, so a key pair is optional: it is what an encrypted assertion is decrypted with, what the
 // relying party's metadata publishes as its encryption key, and what the Shared Signals receiver can
-// present as a TLS client certificate.
+// present as a TLS client certificate. `signals` defaults to on. `false` tells the application not to
+// start that receiver. Sign-in does not read it. The relying party does not start a receiver by itself.
 
 import { createPrivateKey, X509Certificate, type KeyObject } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -51,6 +52,12 @@ export interface WsFedConfig {
    * this realm by itself; the response is checked to hold a SAML 2.0 assertion either way.
    */
   requestTokenType?: boolean;
+  /**
+   * Receive CAEP and RISC. Default true. `false` turns them off: sign-in is unchanged, and the
+   * application should not start a Shared Signals receiver or require transmitter metadata. The
+   * relying party does not start a receiver by itself.
+   */
+  signals?: boolean;
 }
 
 /** The configuration with its files read and its defaults filled in. */
@@ -66,6 +73,11 @@ export interface ResolvedConfig {
   wantAssertionsEncrypted: boolean;
   allowUnsolicited: boolean;
   requestTokenType: boolean;
+  /**
+   * Present only when CAEP and RISC are off. Omitted when on (the default, and an explicit true),
+   * so a configuration that leaves `signals` out still compares equal. Callers test `signals !== false`.
+   */
+  signals?: false;
 }
 
 const looksLikePem = (v: string) => v.includes('-----BEGIN ');
@@ -112,6 +124,7 @@ export function resolveConfig(config: WsFedConfig, baseDir = process.cwd()): Res
   if (typeof skew !== 'number' || !Number.isFinite(skew) || skew < 0 || skew > 600) {
     throw new WsFedError('config', 'clockSkewSeconds must be a number from 0 to 600');
   }
+  const signals = flag(config.signals, true, 'signals');
   const out: ResolvedConfig = {
     realm,
     replyUrl,
@@ -121,6 +134,7 @@ export function resolveConfig(config: WsFedConfig, baseDir = process.cwd()): Res
     allowUnsolicited: flag(config.allowUnsolicited, false, 'allowUnsolicited'),
     requestTokenType: flag(config.requestTokenType, true, 'requestTokenType'),
   };
+  if (!signals) out.signals = false;
 
   if ((config.privateKey === undefined) !== (config.certificate === undefined)) {
     throw new WsFedError('config', 'privateKey and certificate go together: give both or neither');

@@ -2,6 +2,8 @@
 
 A WS-Federation 1.2 passive-requestor relying party for a traditional Node.js application, and a CAEP and RISC receiver. It sends the browser with `wsignin1.0`, asks for a SAML 2.0 assertion, validates that assertion strictly, decrypts it when it is encrypted, and handles `wsignout1.0` and `wsignoutcleanup1.0`. It is TypeScript, usable from JavaScript. Runtime dependencies are `xml-crypto` and `@xmldom/xmldom`.
 
+`"signals": false` turns CAEP and RISC off. The default is on, and a configuration that omits `signals` keeps receiving events. Sign-in is unchanged. The relying party does not start a receiver by itself. The demo does not start one when the flag is false, even if `ssf` is set, and does not require transmitter metadata. `scripts/configure-iya-sts.ts` does not register SSF roles then.
+
 It follows the layout of [saml2-sp-nodejs](https://github.com/rcbj/saml2-sp-nodejs), with WS-Federation in place of the SAML 2.0 HTTP bindings. `packages/wsfed-caep-nodejs/examples/node-http.mjs` is a complete relying party in plain JavaScript.
 
 Documentation: <https://rcbj.github.io/wsfed-caep-nodejs/>. The license is the MIT License in `LICENSE`. The Business Source License used by iya-sts does not apply here.
