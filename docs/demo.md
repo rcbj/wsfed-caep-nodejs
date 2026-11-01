@@ -21,7 +21,9 @@ This makes the key pair and both metadata documents in `demo/generated/` and reg
 docker compose up --build
 ```
 
-Open <http://localhost:3000> and press **Sign in**. The browser goes to iya-sts's `/wsfed` with `wa=wsignin1.0`, the realm `http://localhost:3000/`, the reply URL `http://localhost:3000/wsfed`, a `wctx` naming this sign-in, and a `wreq` asking for a SAML 2.0 assertion. Sign in as `wsfed-demo-user`; iya-sts's page posts the WS-Trust response back to `/wsfed`. **Sign in with two factors** adds `wauth=http://schemas.microsoft.com/claims/multipleauthn`, which iya-sts answers with a step-up.
+Open <http://localhost:3000> and press **Sign in**. The browser goes to iya-sts's `/wsfed` with `wa=wsignin1.0`, the realm `http://localhost:3000/`, the reply URL `http://localhost:3000/wsfed`, a `wctx` naming this sign-in, and a `wreq` asking for a SAML 2.0 assertion. Sign in as `wsfed-demo-user`; iya-sts's page posts the WS-Trust response back to `/wsfed`.
+
+To demand a sign-in method, pass `authenticationMethod` to `login()`. That value is the `wauth` parameter. Two factors is `http://schemas.microsoft.com/claims/multipleauthn`. The [server-side guide](guide.md#asking-for-a-sign-in-method-wauth) shows the call. iya-sts accepts one URI and answers a demand the session does not already meet with a step-up; the URIs are on [Configuring WS-Federation](https://rcbj.github.io/iya-sts/configure-ws-federation.html#wauth-demand-a-sign-in-method).
 
 The page shows the NameID, the realm, the WS-Trust version of the response, the authentication instant and method, the session index, the assertion and its lifetime, and every claim iya-sts released.
 
