@@ -146,6 +146,15 @@ describe('the sign-in response', () => {
     await rejects(post(rp, wresult({ token: signedAssertion({ recipient: 'https://other.test/wsfed' }).xml }), '_r'), 'validation', /Recipient/);
   });
 
+  it('accepts a bare bearer confirmation, as iya-sts issues it, bounded by the Conditions', async () => {
+    const rp = await RelyingParty.create(config());
+    const who = await post(rp, wresult({ token: signedAssertion({ bareConfirmation: true }).xml }), '_r');
+    assert.equal(who.nameId, 'alice-1234');
+    assert.ok(who.notOnOrAfter.getTime() > Date.now());
+    await rejects(post(rp, wresult({ token: signedAssertion({ bareConfirmation: true, notOnOrAfterMs: -120_000 }).xml }), '_r'), 'validation', /expired/);
+    await rejects(post(rp, wresult({ token: signedAssertion({ bareConfirmation: true, noConditionsExpiry: true }).xml }), '_r'), 'validation', /nothing|no Conditions NotOnOrAfter/);
+  });
+
   it('refuses an unsigned assertion: in WS-Federation its signature is the only one', async () => {
     const rp = await RelyingParty.create(config());
     await rejects(post(rp, wresult({ token: assertionXml().xml }), '_r'), 'validation', /not signed/);
