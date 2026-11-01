@@ -189,9 +189,18 @@ export async function validateToken(wresult: string, ctx: ValidationContext): Pr
   }
   if (!nameIdEl || !text(nameIdEl)) invalid('the assertion\'s Subject has no NameID');
 
+  const conditions = child(assertion, NS.saml, 'Conditions') ?? invalid('the assertion has no Conditions, so it names no audience');
+  const notBefore = instant(attr(conditions, 'NotBefore'), 'Conditions NotBefore');
+  const notOnOrAfter = instant(attr(conditions, 'NotOnOrAfter'), 'Conditions NotOnOrAfter');
+
   // A bearer SubjectConfirmation, unexpired. There was no AuthnRequest, so one that answers a request
   // (InResponseTo) belongs to a SAML Web SSO exchange, not to this one, and is not accepted here; a
   // Recipient, when the identity provider names one, must be this reply URL.
+  //
+  // SubjectConfirmationData is optional (SAML Core 2.4.1.1); only the Web Browser SSO profile requires
+  // it, and WS-Federation does not use that profile. Identity providers issuing a SAML 2.0 token to a
+  // WS-Federation relying party (iya-sts among them) send a bare bearer confirmation, whose lifetime is
+  // then the Conditions' NotOnOrAfter. One without that is refused: nothing would bound the assertion.
   const reasons: string[] = [];
   let confirmedUntil: Date | undefined;
   for (const sc of children(subject, NS.saml, 'SubjectConfirmation')) {
@@ -201,26 +210,27 @@ export async function validateToken(wresult: string, ctx: ValidationContext): Pr
     }
     const data = child(sc, NS.saml, 'SubjectConfirmationData');
     if (!data) {
-      reasons.push('no SubjectConfirmationData');
-      continue;
+      if (!notOnOrAfter) {
+        reasons.push('no SubjectConfirmationData, and no Conditions NotOnOrAfter to bound it');
+        continue;
+      }
+      confirmedUntil = notOnOrAfter;
+      break;
     }
     const recipient = attr(data, 'Recipient');
-    const notOnOrAfter = instant(attr(data, 'NotOnOrAfter'), 'SubjectConfirmationData NotOnOrAfter');
+    const until = instant(attr(data, 'NotOnOrAfter'), 'SubjectConfirmationData NotOnOrAfter') ?? notOnOrAfter;
     if (recipient !== undefined && recipient !== ctx.replyUrl) reasons.push(`Recipient ${recipient}`);
-    else if (!notOnOrAfter) reasons.push('no NotOnOrAfter');
-    else if (notOnOrAfter.getTime() <= now - skew) reasons.push(`expired at ${notOnOrAfter.toISOString()}`);
+    else if (!until) reasons.push('no NotOnOrAfter, on the confirmation or the Conditions');
+    else if (until.getTime() <= now - skew) reasons.push(`expired at ${until.toISOString()}`);
     else if (attr(data, 'NotBefore') !== undefined) reasons.push('a NotBefore, which a bearer confirmation must not have');
     else if (attr(data, 'InResponseTo') !== undefined) reasons.push(`InResponseTo ${attr(data, 'InResponseTo')}, which answers a SAML request, not a WS-Federation sign-in`);
     else {
-      confirmedUntil = notOnOrAfter;
+      confirmedUntil = until;
       break;
     }
   }
   if (!confirmedUntil) invalid(`no bearer SubjectConfirmation of the assertion fits: ${reasons.join('; ') || 'there is none'}`);
 
-  const conditions = child(assertion, NS.saml, 'Conditions') ?? invalid('the assertion has no Conditions, so it names no audience');
-  const notBefore = instant(attr(conditions, 'NotBefore'), 'Conditions NotBefore');
-  const notOnOrAfter = instant(attr(conditions, 'NotOnOrAfter'), 'Conditions NotOnOrAfter');
   if (notBefore && notBefore.getTime() > now + skew) invalid(`the assertion is not valid before ${notBefore.toISOString()}`);
   if (notOnOrAfter && notOnOrAfter.getTime() <= now - skew) invalid(`the assertion expired at ${notOnOrAfter.toISOString()}`);
   const restrictions = children(conditions, NS.saml, 'AudienceRestriction');

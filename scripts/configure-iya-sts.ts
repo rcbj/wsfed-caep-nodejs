@@ -10,8 +10,9 @@
  *   2. the identity provider's TLS root, if the configuration's `idpCa` file does not exist yet: taken
  *      from the TLS handshake (trust on first use) and its fingerprint printed, for you to compare with
  *      iya-sts's Server configuration → PKI page;
- *   3. this relying party's federation METADATA (the same as `npm run generate-metadata`), written to
- *      demo/generated/rp-metadata.xml for an identity provider that reads one, and the relying party
+ *   3. this relying party's federation METADATA, from the configuration's certificate when it has
+ *      one, with the realm and reply URL this run registers (a loopback pair follows PORT), written
+ *      to demo/generated/rp-metadata.xml for an identity provider that reads one, and the relying party
  *      REGISTERED on iya-sts: an application declared for the `wsfed` protocol family, its identifier and
  *      `wsfedRealm` the realm, and the reply URL in `wsfedReplyUrl` — product mode posts a token only to a
  *      registered reply URL, matched exactly. When the application exists already, the reply URL is added
@@ -40,24 +41,32 @@
  * a compose stack keeps it.
  */
 
+import { execFileSync } from 'node:child_process';
+import { X509Certificate } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { connect, type PeerCertificate } from 'node:tls';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { X509Certificate } from 'node:crypto';
 import { main as cli } from '../packages/wsfed-caep-nodejs/src/cli.ts';
+import { resolveConfig, type WsFedConfig } from '../packages/wsfed-caep-nodejs/src/config.ts';
 import { send } from '../packages/wsfed-caep-nodejs/src/http.ts';
 import { readIdpMetadata } from '../packages/wsfed-caep-nodejs/src/metadata.ts';
+import { RelyingParty } from '../packages/wsfed-caep-nodejs/src/relying-party.ts';
+import { demoPort, endpointsFor } from './redirects.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 export function usage(): string {
-  return `Usage: node scripts/configure-iya-sts.ts [--config path] [--idp url]
+  return `Usage: node scripts/configure-iya-sts.ts [--config path] [--idp url] [--public-url url]
                                         [--test-user name | --no-test-user] [--dry-run]
 
   --config        The demo's WS-Federation configuration (default: demo/wsfed.json)
   --idp           iya-sts's base URL; the realm's, e.g. https://host/realm/acme, for a trust realm
                   (default: $IYA_STS_URL or https://localhost:8081)
+  --public-url    Replace the origin of the file's realm and reply URL with this URL, and keep
+                  their paths (default: unset; $PUBLIC_URL). Without it, a loopback realm and
+                  reply URL follow the running demo's PORT, then $PORT. Any other host is left
+                  as written.
   --test-user     The test user to create (default: wsfed-demo-user). Its password is
                   $WSFED_DEMO_USER_PASSWORD, or one is generated and printed once. With
                   $WSFED_DEMO_USER_PASSWORD set, an existing user's password is replaced.
@@ -70,6 +79,9 @@ The management API secret is ADMIN_API_CLIENT_SECRET or STS_ADMIN_API_CLIENT_SEC
 export interface Args {
   config: string;
   idp: string;
+  publicUrl: string;
+  /** Set when --public-url or PUBLIC_URL was given. The default does not count. */
+  publicUrlGiven: boolean;
   testUser: string;
   dryRun: boolean;
   help: boolean;
@@ -79,6 +91,8 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
   const out: Args = {
     config: resolve(repoRoot, 'demo/wsfed.json'),
     idp: (env.IYA_STS_URL || 'https://localhost:8081').replace(/\/+$/, ''),
+    publicUrl: (env.PUBLIC_URL || 'http://localhost:3000').replace(/\/+$/, ''),
+    publicUrlGiven: Boolean(env.PUBLIC_URL),
     testUser: 'wsfed-demo-user',
     dryRun: false,
     help: false,
@@ -93,13 +107,17 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
     if (arg === '--help' || arg === '-h') out.help = true;
     else if (arg === '--config') out.config = resolve(value());
     else if (arg === '--idp') out.idp = value().replace(/\/+$/, '');
-    else if (arg === '--test-user') out.testUser = value().trim();
+    else if (arg === '--public-url') {
+      out.publicUrl = value().replace(/\/+$/, '');
+      out.publicUrlGiven = true;
+    } else if (arg === '--test-user') out.testUser = value().trim();
     else if (arg === '--no-test-user') out.testUser = '';
     else if (arg === '--dry-run') out.dryRun = true;
     else throw new Error(`Unknown argument ${arg}\n${usage()}`);
   }
   const u = new URL(out.idp);
   if (u.protocol !== 'https:') throw new Error(`--idp must be https, not ${out.idp}`);
+  if (!out.publicUrl) throw new Error('--public-url is empty');
   return out;
 }
 
@@ -237,6 +255,35 @@ async function mintAdminToken(origin: string, base: string, ca: string | undefin
   return reply.body.access_token;
 }
 
+/** PORT from the running wsfed-demo container, when compose has one. Docker being absent is not an error. */
+export function containerPort(cwd = repoRoot): string | undefined {
+  try {
+    const id = execFileSync('docker', ['compose', 'ps', '-q', 'wsfed-demo'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim().split('\n')[0];
+    if (!id) return undefined;
+    const env = execFileSync('docker', ['inspect', '-f', '{{range .Config.Env}}{{println .}}{{end}}', id], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return env.split('\n').find((line) => line.startsWith('PORT='))?.slice('PORT='.length);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * This relying party's metadata, from the configuration's certificate when it has one, with the realm
+ * and reply URL this run registers. The file on disk is not what is written: a loopback realm is a
+ * different application on a different port.
+ */
+export function metadataFor(configPath: string, realm: string, replyUrl: string): string {
+  const raw = JSON.parse(readFileSync(configPath, 'utf8')) as WsFedConfig;
+  delete raw.idpCa;
+  raw.realm = realm;
+  raw.replyUrl = replyUrl;
+  return new RelyingParty(resolveConfig(raw, dirname(resolve(configPath))), undefined).metadata();
+}
+
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv);
   if (args.help) {
@@ -244,6 +291,15 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     return;
   }
   const files = filesOf(args.config);
+  // The realm is the application identifier (wtrealm) and the reply URL is wreply. A loopback pair
+  // follows the port the demo listens on, so a port change registers that realm. An explicit public
+  // URL replaces the origin instead. pollIntervalMs is a timer and is not an address.
+  const port = demoPort(process.env.PORT, containerPort());
+  const endpoints = endpointsFor(files.realm, files.replyUrl, {
+    publicUrl: args.publicUrl, publicUrlGiven: args.publicUrlGiven, port,
+  });
+  files.realm = endpoints.realm;
+  files.replyUrl = endpoints.replyUrl;
   const { origin, base } = realmOf(args.idp);
 
   if (args.dryRun) {
@@ -276,8 +332,11 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     ca = readFileSync(files.idpCa, 'utf8');
   }
 
-  // 3. The RP metadata, and the relying party registered.
-  await cli(['metadata', '--config', args.config, '--out', files.rpMetadata]);
+  // 3. The RP metadata uses the realm and reply URL this run registers, then the relying party.
+  const rpMetadataXml = metadataFor(args.config, files.realm, files.replyUrl);
+  mkdirSync(dirname(files.rpMetadata), { recursive: true });
+  writeFileSync(files.rpMetadata, rpMetadataXml);
+  console.log(`Wrote the relying party metadata to ${files.rpMetadata}`);
   const secret = process.env.ADMIN_API_CLIENT_SECRET || process.env.STS_ADMIN_API_CLIENT_SECRET || '';
   if (!secret) throw new Error('neither ADMIN_API_CLIENT_SECRET nor STS_ADMIN_API_CLIENT_SECRET is set, so no /admin-api token can be minted.');
   const token = await mintAdminToken(origin, base, ca, secret);
