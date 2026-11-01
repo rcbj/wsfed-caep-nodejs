@@ -65,6 +65,7 @@ const { RelyingParty } = require('wsfed-caep-nodejs');       // CommonJS, Node 2
 | `idpEntityId` | — | For metadata that is an aggregate: which identity provider. |
 | `clockSkewSeconds` | `60` | How far the two clocks may disagree. |
 | `allowUnsolicited` | `false` | Accept a sign-in response no request asked for (identity-provider-initiated sign-in). |
+| `signals` | `true` | Receive CAEP and RISC. `"signals": false` turns them off. Sign-in is unchanged. The relying party does not start a receiver; the application should not start one when this is false. Transmitter metadata is not required then. |
 
 `RelyingParty.create(config, { baseDir })` takes the same members as an object.
 
@@ -111,6 +112,8 @@ An `EncryptedAssertion`, or a bare `xenc:EncryptedData` in the `RequestedSecurit
 ## Shared Signals: CAEP and RISC
 
 `SignalsReceiver` makes the application a Shared Signals receiver (OpenID SSF 1.0, poll delivery per RFC 8936). It has **one stream** at the identity provider, carrying CAEP session events and RISC account events about **every person** who uses the application. Each event is turned into the application's own sessions to end. WS-Federation's own sign-out reaches the relying party only through the browser (`wsignoutcleanup1.0`, an image load a browser may block); a CAEP event reaches it whether or not the browser is open.
+
+The default is on. `"signals": false` turns CAEP and RISC off. Sign-in is unchanged. The relying party does not start a receiver by itself; the application should not start one when `config.signals === false`. The property is omitted from the resolved configuration when the flag is on, so test `config.signals !== false`. Transmitter metadata is not required when the flag is false. The demo follows that.
 
 ```ts
 import { EVENT, RelyingParty, SignalsReceiver } from 'wsfed-caep-nodejs';
