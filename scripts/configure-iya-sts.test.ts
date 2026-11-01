@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { MULTIPLE_ACCOUNTS, filesOf, ssfCalls, idpMetadataUrl, parseArgs, planFor, realmOf } from './configure-iya-sts.ts';
+import { MULTIPLE_ACCOUNTS, filesOf, metadataFor, ssfCalls, idpMetadataUrl, parseArgs, planFor, realmOf } from './configure-iya-sts.ts';
 import { demoPort, endpointsFor, onPort } from './redirects.mjs';
 
 describe('configure-iya-sts', () => {
@@ -105,5 +105,18 @@ describe('configure-iya-sts', () => {
     assert.deepEqual(body.fields.wsfedReplyUrl, ['http://localhost:3001/wsfed']);
     assert.deepEqual(plan[1]!.body, { application: 'http://localhost:3001/', attribute: 'wsfedReplyUrl', value: 'http://localhost:3001/wsfed' });
     assert.ok(plan.some((c) => c.path === 'https://localhost:8081/wsfed/metadata/http%3A%2F%2Flocalhost%3A3001%2F'));
+  });
+
+  it('writes metadata for the realm and reply URL this run registers', () => {
+    const metaConfig = join(dir, 'wsfed-port.json');
+    writeFileSync(metaConfig, JSON.stringify({
+      realm: 'http://localhost:3000/', replyUrl: 'http://localhost:3000/wsfed',
+      idpMetadata: 'https://idp.example/metadata',
+    }));
+    const xml = metadataFor(metaConfig, 'http://localhost:3001/', 'http://localhost:3001/wsfed');
+    assert.match(xml, /entityID="http:\/\/localhost:3001\/"/);
+    assert.match(xml, /<wsa:Address>http:\/\/localhost:3001\/wsfed<\/wsa:Address>/);
+    assert.doesNotMatch(xml, /localhost:3000/);
+    assert.equal(JSON.parse(readFileSync(metaConfig, 'utf8')).realm, 'http://localhost:3000/');
   });
 });
