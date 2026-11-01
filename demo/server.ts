@@ -46,6 +46,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EVENT, RelyingParty, SignalsReceiver, WsFedError, type SignalEvent, type WsFedLogin } from 'wsfed-caep-nodejs';
+import { onPort } from '../scripts/redirects.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3000);
@@ -58,7 +59,7 @@ const STYLES = readFileSync(resolve(here, 'public/styles.css'));
 const APP_JS = readFileSync(resolve(here, 'public/app.js'));
 const FILE = (() => {
   try {
-    return JSON.parse(readFileSync(CONFIG, 'utf8')) as { replyUrl?: string; ssf?: { transmitter?: string; pollIntervalMs?: number } };
+    return JSON.parse(readFileSync(CONFIG, 'utf8')) as { realm?: string; replyUrl?: string; ssf?: { transmitter?: string; pollIntervalMs?: number } };
   } catch (err) {
     console.warn(`cannot read ${CONFIG}: ${(err as Error).message}`);
     return {};
@@ -78,7 +79,13 @@ const SSF = FILE.ssf?.transmitter ? FILE.ssf : undefined;
 // before the identity provider is reachable or the setup script has been run.
 let rpPromise: Promise<RelyingParty> | undefined;
 function relyingParty(): Promise<RelyingParty> {
-  rpPromise ??= RelyingParty.fromFile(CONFIG).then((rp) => {
+  // A loopback realm and reply URL follow the port this process listens on, the address
+  // configure-iya-sts registers. Any other host is left as written. The file is not rewritten.
+  // pollIntervalMs is a timer, not an address.
+  rpPromise ??= RelyingParty.fromFile(CONFIG, {
+    ...(FILE.realm ? { realm: onPort(FILE.realm, PORT) } : {}),
+    ...(FILE.replyUrl ? { replyUrl: onPort(FILE.replyUrl, PORT) } : {}),
+  }).then((rp) => {
     startReceiver(rp);
     return rp;
   }, (err: unknown) => {
