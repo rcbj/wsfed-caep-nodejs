@@ -14,7 +14,7 @@ npm run build
 
 The library's tests run with `node:test` on the TypeScript sources directly, against a stub WS-Federation identity provider (`packages/wsfed-caep-nodejs/test/stub-idp.ts`) that publishes federation metadata, writes and signs SAML 2.0 assertions with its own key, encrypts them, and wraps them in WS-Trust responses. They cover:
 
-- the configuration, the IdP's federation metadata (the STS role found by its resolved `xsi:type`, its passive endpoint, token types and keys), and this relying party's metadata;
+- the configuration (including `signals`, on unless set to `false`), the IdP's federation metadata (the STS role found by its resolved `xsi:type`, its passive endpoint, token types and keys), and this relying party's metadata;
 - the `wsignin1.0` request: realm, reply URL, `wctx`, the `wreq` asking for SAML 2.0, `wfresh`, `wauth`, `whr`; and `wsignout1.0`;
 - the response in both WS-Trust shapes: an unsigned assertion, an altered one, another key, four signature-wrapping attacks (one through `wsu:Id`), audience, recipient, issuer, expiry, `AppliesTo`, the response's `Lifetime`, an assertion answering a SAML request, a SAML 1.1 token, the `wctx` correlation, unsolicited, replay, a DOCTYPE;
 - encryption: AES-GCM and AES-CBC, RSA-OAEP with SHA-1 and SHA-256, `EncryptedAssertion` and a bare `EncryptedData`, an altered ciphertext, `EncryptedAttribute`, no key, and `wantAssertionsEncrypted`;

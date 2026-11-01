@@ -28,10 +28,12 @@
 //                         out at the identity provider too (wa=wsignout1.0)
 //   GET  /healthz         for the container's health check
 //
-// SHARED SIGNALS: with an `ssf` block in the configuration file the demo is also a CAEP and RISC receiver
+// SHARED SIGNALS: with an `ssf` block, and `signals` not false, the demo is also a CAEP and RISC receiver
 // (the library's SignalsReceiver): one poll stream at the identity provider, authenticated by mutual TLS
-// with the relying party's own key pair. An event that revokes a session, or disables, purges or
-// compromises an account, ENDS the matching local sessions here, and their open tabs are told at once.
+// with the relying party's own key pair. `"signals": false` turns that off. The receiver is not started,
+// and transmitter metadata is not required, even when `ssf` is present. Sign-in is unchanged. The default
+// is on. An event that revokes a session, or disables, purges or compromises an account, ENDS the matching
+// local sessions here, and their open tabs are told at once.
 //
 // Three cookies. `wsfed_pending` holds the outstanding sign-in ids (the `id` in each wctx), HMAC-signed,
 // scoped to the reply URL, and SameSite=None: the identity provider posts the sign-in response from a
@@ -59,7 +61,7 @@ const STYLES = readFileSync(resolve(here, 'public/styles.css'));
 const APP_JS = readFileSync(resolve(here, 'public/app.js'));
 const FILE = (() => {
   try {
-    return JSON.parse(readFileSync(CONFIG, 'utf8')) as { realm?: string; replyUrl?: string; ssf?: { transmitter?: string; pollIntervalMs?: number } };
+    return JSON.parse(readFileSync(CONFIG, 'utf8')) as { realm?: string; replyUrl?: string; signals?: boolean; ssf?: { transmitter?: string; pollIntervalMs?: number } };
   } catch (err) {
     console.warn(`cannot read ${CONFIG}: ${(err as Error).message}`);
     return {};
@@ -73,7 +75,7 @@ const REPLY_PATH = (() => {
   }
 })();
 const replyPath = (rp: RelyingParty) => new URL(rp.config.replyUrl).pathname;
-const SSF = FILE.ssf?.transmitter ? FILE.ssf : undefined;
+const SSF = FILE.signals !== false && FILE.ssf?.transmitter ? FILE.ssf : undefined;
 
 // The relying party is built on first use and again after a failure, so the demo starts (and is healthy)
 // before the identity provider is reachable or the setup script has been run.
@@ -172,8 +174,13 @@ function logFor(sid: string, entry: LoggedEvent): void {
 
 // THE RECEIVER, started once the service provider is loaded. Its state is shown on the home page.
 let receiver: SignalsReceiver | undefined;
-let receiverState = SSF ? 'starting' : 'not configured (no ssf block in the configuration file)';
+let receiverState = FILE.signals === false ? 'signals are off' : SSF ? 'starting' : 'not configured (no ssf block in the configuration file)';
 function startReceiver(rp: RelyingParty): void {
+  // Omitted means on. Do not start a receiver, or read transmitter metadata, when signals is false.
+  if (rp.config.signals === false) {
+    receiverState = 'signals are off';
+    return;
+  }
   if (!SSF || receiver) return;
   const r = new SignalsReceiver({
     transmitter: SSF.transmitter!,
