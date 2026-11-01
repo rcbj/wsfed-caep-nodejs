@@ -63,7 +63,7 @@ The container uses the **host's network**, so that `https://localhost:8081`, the
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORT` | `3000` | The port the demo listens on. It must match `realm` and `replyUrl` in `demo/wsfed.json`. |
+| `PORT` | `3000` | The port the demo listens on. A loopback `realm` and `replyUrl` follow it. Re-run `configure-iya-sts` so iya-sts has the new reply URL. |
 | `WSFED_CONFIG` | `demo/wsfed.json` | Another configuration file. |
 | `SESSION_SECRET` | random per start | Signs the cookies. Set it to keep sign-ins in flight across a restart. |
 

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { MULTIPLE_ACCOUNTS, filesOf, ssfCalls, idpMetadataUrl, parseArgs, planFor, realmOf } from './configure-iya-sts.ts';
+import { demoPort, endpointsFor, onPort } from './redirects.mjs';
 
 describe('configure-iya-sts', () => {
   const dir = mkdtempSync(join(tmpdir(), 'wsfed-setup-'));
@@ -62,11 +63,47 @@ describe('configure-iya-sts', () => {
   });
 
   it('takes its options, and refuses plain http', () => {
-    const a = parseArgs(['--idp', 'https://idp.test/', '--no-test-user', '--dry-run'], {});
+    const a = parseArgs(['--idp', 'https://idp.test/', '--public-url', 'http://app.test/', '--no-test-user', '--dry-run'], {});
     assert.equal(a.idp, 'https://idp.test');
+    assert.equal(a.publicUrl, 'http://app.test');
+    assert.equal(a.publicUrlGiven, true);
+    assert.equal(parseArgs([], {}).publicUrlGiven, false);
+    assert.equal(parseArgs([], { PUBLIC_URL: 'http://demo.test' }).publicUrlGiven, true);
     assert.equal(a.testUser, '');
     assert.equal(a.dryRun, true);
     assert.throws(() => parseArgs(['--idp', 'http://idp.test'], {}), /https/);
+    assert.throws(() => parseArgs(['--public-url', ''], {}), /public-url/);
     assert.throws(() => parseArgs(['--bogus'], {}), /Unknown argument/);
+  });
+
+  it('registers a loopback realm and reply URL on the port the demo listens on', () => {
+    const moved = endpointsFor('http://localhost:3000/', 'http://localhost:3000/wsfed', { publicUrlGiven: false, port: 3001 });
+    assert.equal(moved.realm, 'http://localhost:3001/');
+    assert.equal(moved.replyUrl, 'http://localhost:3001/wsfed');
+    assert.equal(onPort('http://127.0.0.1:3000/wsfed', 3001), 'http://127.0.0.1:3001/wsfed');
+    assert.equal(onPort('http://[::1]:3000/wsfed', 3001), 'http://[::1]:3001/wsfed');
+    assert.equal(onPort('not a url', 3001), 'not a url');
+    const published = endpointsFor('https://app.example/', 'https://app.example/wsfed', { publicUrlGiven: false, port: 3001 });
+    assert.equal(published.realm, 'https://app.example/');
+    assert.equal(published.replyUrl, 'https://app.example/wsfed');
+    const explicit = endpointsFor('http://localhost:3000/', 'http://localhost:3000/wsfed', { publicUrl: 'http://app.test:9', publicUrlGiven: true, port: 3001 });
+    assert.equal(explicit.realm, 'http://app.test:9/');
+    assert.equal(explicit.replyUrl, 'http://app.test:9/wsfed');
+    assert.equal(demoPort('3000', '3001'), 3001);
+    assert.equal(demoPort('3001', ''), 3001);
+    assert.equal(demoPort('3002', 'nope'), 3002);
+    assert.equal(demoPort('', undefined), undefined);
+    assert.equal(demoPort('nope', undefined), undefined);
+    const files = filesOf(config);
+    const endpoints = endpointsFor(files.realm, files.replyUrl, { publicUrlGiven: false, port: 3001 });
+    files.realm = endpoints.realm;
+    files.replyUrl = endpoints.replyUrl;
+    const plan = planFor(files, 'https://localhost:8081', '');
+    const body = plan[0]!.body as { identifier: string; fields: { wsfedRealm: string[]; wsfedReplyUrl: string[] } };
+    assert.equal(body.identifier, 'http://localhost:3001/');
+    assert.deepEqual(body.fields.wsfedRealm, ['http://localhost:3001/']);
+    assert.deepEqual(body.fields.wsfedReplyUrl, ['http://localhost:3001/wsfed']);
+    assert.deepEqual(plan[1]!.body, { application: 'http://localhost:3001/', attribute: 'wsfedReplyUrl', value: 'http://localhost:3001/wsfed' });
+    assert.ok(plan.some((c) => c.path === 'https://localhost:8081/wsfed/metadata/http%3A%2F%2Flocalhost%3A3001%2F'));
   });
 });
