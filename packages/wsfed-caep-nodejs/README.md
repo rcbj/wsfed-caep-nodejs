@@ -57,7 +57,7 @@ const { RelyingParty } = require('wsfed-caep-nodejs');       // CommonJS, Node 2
 |---|---|---|
 | `realm` | required | This relying party's realm: the `wtrealm` it sends, the audience every assertion must name, and its metadata's entityID. |
 | `replyUrl` | required | The reply URL (`wreply`): where the identity provider posts the token, and sends `wsignoutcleanup1.0`. |
-| `idpMetadata` | required | The identity provider's federation metadata: a file path, an `https` URL, or the XML. Its entityID, passive requestor endpoint, token types and signing certificates are read from it. |
+| `idpMetadata` | required | The identity provider's federation metadata: a file path, an `https` URL (plain `http` only to a loopback host), or the XML. Its entityID, passive requestor endpoint, token types and signing certificates are read from it. |
 | `privateKey`, `certificate` | — | An RSA key and its certificate (file paths relative to the configuration file, or the PEM). Encrypted assertions are decrypted with it, the metadata publishes it as the encryption key, and the Shared Signals receiver can present it as a TLS client certificate. WS-Federation itself signs nothing. |
 | `wantAssertionsEncrypted` | `false` | Refuse an assertion that is not encrypted. Needs the key pair. |
 | `requestTokenType` | `true` | Ask for a SAML 2.0 assertion with a `wreq` RequestSecurityToken naming its TokenType. Turn off only for an identity provider that refuses `wreq` and issues SAML 2.0 to this realm by itself. |

@@ -65,7 +65,7 @@ ADMIN_API_CLIENT_SECRET=… WSFED_DEMO_USER_PASSWORD=… npm run configure-iya-s
 docker compose up --build
 ```
 
-Open <http://localhost:3000> and sign in as `wsfed-demo-user`.
+Open <http://localhost:3000> and sign in as `wsfed-demo-user`. Unless `WSFED_DEMO_USER_PASSWORD` sets its password, iya-sts generates one, and the install script writes it to `demo/generated/wsfed-demo-user.password` (created mode 0600) and prints only that path, never the password.
 
 A loopback realm and reply URL follow `PORT` in the running server and in `scripts/configure-iya-sts.ts`. The metadata file is built from those rewritten values, not from the on-disk `localhost:3000` file alone. Any other host is left as written. An explicit `--public-url` or a non-empty `PUBLIC_URL` replaces the origin and keeps the path. A different port is a different realm, so run `configure-iya-sts` again after changing `PORT`. The previous `:3000` registration stays on iya-sts. `pollIntervalMs` is a millisecond pause, not a port.
 
@@ -84,6 +84,8 @@ iya-sts main sets the assertion SessionIndex to the assertion id. The CAEP sessi
 The demo image build copies that file into the image at `/app/demo/generated/idp-ca.pem`, so the image trusts that iya-sts with no bind mount and no fetch. Run the install script before you build the image. Rebuild the image after running the install script against a different iya-sts (a development iya-sts makes a new CA when it restarts). `.dockerignore` admits only that file from `demo/generated`; the key pair and both metadata documents stay out of the image. A build with no chain file yet (a fresh clone, CI's `--target test`) still succeeds; the image then has no `idpCa` file.
 
 The mechanism is `COPY demo demo` plus `.dockerignore`'s `demo/generated/*` and `!demo/generated/idp-ca.pem`. Do not replace it with a COPY that names the file or globs for it: when the file is absent, BuildKit fails on the missing path and the classic builder fails with "no source files were specified". A directory COPY of `demo/` (which always exists) succeeds in both. The container does not refresh the chain at start. `node scripts/trust-chain.mjs --config demo/wsfed.json --idp https://localhost:8081` refreshes the file by hand. Compose mounts `demo/generated` (for the key, the certificate and the IdP metadata), which hides the image's copy behind the host's file.
+
+**Plain http (#18).** `send()` in `packages/wsfed-caep-nodejs/src/http.ts` is the one place every fetch goes through (metadata URL, SSF configuration, JWKS, stream and poll). It refuses a URL with whitespace or a control character, and plain `http://` to a host that is not loopback (`127.0.0.0/8`, `[::1]`, `localhost`, by `isLoopbackHost()` on the WHATWG hostname), before any lookup or connection, keeping the fetch's `WsFedError` code and naming only `http://host[:port]`; userinfo is never loopback. node:http(s) follows no redirect. No opt-out. `test/plain-http.test.ts` covers it; `http://0.0.0.0:<port>` reaches a 127.0.0.1 listener on Linux, so its tripwire listener proves no connection is opened.
 
 ## Releases
 

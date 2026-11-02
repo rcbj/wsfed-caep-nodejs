@@ -21,6 +21,10 @@ It is TypeScript and works from JavaScript, needs no web framework, and depends 
 npm install wsfed-caep-nodejs
 ```
 
+## Plain http is for loopback only
+
+The library fetches the identity provider's federation metadata (when `idpMetadata` is a URL) and calls the Shared Signals transmitter (configuration, JWKS, stream and poll). Each of these uses https. A plain `http://` URL is refused before any connection, with a `WsFedError` of that fetch's code (`metadata`, `ssf`) naming only the scheme and host, unless the host is loopback: `127.0.0.0/8`, `::1` or `localhost`. A URL with userinfo is never treated as loopback, and a URL with whitespace or a control character is refused. There is no setting to allow it. Your own realm and reply URL may be http; they are never fetched.
+
 ## Where to read
 
 - **[Server-side guide](guide.md):** configuration, registration, the login route, the reply URL, sign-out and the session, step by step.
