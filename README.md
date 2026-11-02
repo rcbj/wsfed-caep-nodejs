@@ -10,7 +10,7 @@ It is built and tested against [iya-sts](https://rcbj.github.io/iya-sts/ws-feder
 |---|---|
 | [`packages/wsfed-caep-nodejs`](packages/wsfed-caep-nodejs) | The library, published to npm as [`wsfed-caep-nodejs`](https://www.npmjs.com/package/wsfed-caep-nodejs). [`examples/node-http.mjs`](packages/wsfed-caep-nodejs/examples/node-http.mjs) is a complete relying party in plain JavaScript. |
 | [`demo`](demo) | A traditional server-rendered web application, run in one container. |
-| [`scripts/configure-iya-sts.ts`](scripts/configure-iya-sts.ts) | Registers the demo on a running iya-sts as a WS-Federation relying party, and reads iya-sts's federation metadata back. |
+| [`scripts/configure-iya-sts.ts`](scripts/configure-iya-sts.ts) | The install script. Registers the demo on a running iya-sts as a WS-Federation relying party, writes the iya-sts listener CA trust chain to the file `idpCa` names, and reads iya-sts's federation metadata back. |
 
 ## Install
 
@@ -30,6 +30,16 @@ docker compose up --build
 
 Open <http://localhost:3000> and sign in as `wsfed-demo-user`. See [Running the demo](docs/demo.md) and [Setting up iya-sts](docs/configure.md).
 
+## The iya-sts trust chain (`idpCa`)
+
+`idpCa` in `demo/wsfed.json` names the iya-sts TLS listener CA trust chain the library trusts when it reads the identity provider's metadata over HTTPS and calls the Shared Signals transmitter. The default is `generated/idp-ca.pem`, relative to `demo/`. The value may also be the PEM itself. The library trusts every certificate in it, in addition to Node's own store, and still checks the host name against the listener certificate's subjectAltName.
+
+`scripts/configure-iya-sts.ts`, the install script, writes that file on every run. It saves the whole chain iya-sts publishes at `GET /tls/server-certificate` (leaf, TLS Issuing CA, Intermediate, Root), or the chain from the TLS handshake when that path does not answer (`scripts/trust-chain.mjs`). It prints the path, the trust anchor's subject and its SHA-256 fingerprint. Compare the anchor with the Root CA on iya-sts's PKI page.
+
+The demo image build copies that file into the image at `/app/demo/generated/idp-ca.pem`, so the image trusts that iya-sts with no bind mount and no fetch. Run the install script before you build the image. Rebuild the image after running the install script against a different iya-sts (a development iya-sts makes a new CA when it restarts). `.dockerignore` admits only that file from `demo/generated`; the key pair and both metadata documents stay out of the image. A build with no chain file yet (a fresh clone, CI's `--target test`) still succeeds; the image then has no `idpCa` file.
+
+The mechanism is `COPY demo demo` plus `.dockerignore`'s `demo/generated/*` and `!demo/generated/idp-ca.pem`. Do not replace it with a COPY that names the file or globs for it: when the file is absent, BuildKit fails on the missing path and the classic builder fails with "no source files were specified". A directory COPY of `demo/` (which always exists) succeeds in both. The container does not refresh the chain at start. `node scripts/trust-chain.mjs --config demo/wsfed.json --idp https://localhost:8081` refreshes the file by hand. Compose mounts `demo/generated` (for the key, the certificate and the IdP metadata), which hides the image's copy behind the host's file.
+
 ## Live sign-in
 
 The unit suite is one image. It does not run as part of `docker build .` or `docker compose build`.
@@ -38,11 +48,11 @@ The unit suite is one image. It does not run as part of `docker build .` or `doc
 docker build --target test .
 ```
 
-`python3 scripts/live_iya_sts.py` is the live half, on the host's Python. It starts a fresh iya-sts in memory mode unless `IYA_STS_URL` is already set, builds the demo image, and runs `node scripts/configure-iya-sts.ts` inside that image. Do not run node or npm on the host. The script signs in, emits credential-change, then session-revoked, and requires `GET /live-status` to show both. That JSON is `signedIn`, `subject`, `receiver`, and `events` of `type` and `jti`. It has no tokens. session-revoked leaves `signedIn` false.
+`python3 scripts/live_iya_sts.py` is the live half, on the host's Python. It starts a fresh iya-sts in memory mode unless `IYA_STS_URL` is already set (`IYA_STS_IMAGE` names an iya-sts image to start instead of building `main`). It copies this checkout to a scratch build context, builds the demo image there and runs the install script `node scripts/configure-iya-sts.ts` inside it, which writes the key pair, the IdP metadata and the `idpCa` chain into the context's `demo/generated`. Then it builds the demo image again, checks the image carries the chain and nothing else from `demo/generated`, and starts it with only the key, the certificate and the IdP metadata mounted, one file each. It never rewrites `idpCa` or fetches the CA for the demo. Do not run node or npm on the host. `LIVE_STS_PORT` (default 18551) and `LIVE_DEMO_PORT` (default 18651) choose the ports. The script signs in, emits credential-change, then session-revoked, and requires `GET /live-status` to show both. That JSON is `signedIn`, `subject`, `receiver`, and `events` of `type` and `jti`. It has no tokens. session-revoked leaves `signedIn` false.
 
 iya-sts main sets the WS-Federation assertion SessionIndex to the assertion id. The CAEP session-revoked subject names the sign-on session, so the index finds nobody. The demo ends its one session from the event handler, as the Java demo does in `Demo.java`.
 
-Do not bind host ports 3000 or 8081. [`.github/workflows/nightly.yml`](.github/workflows/nightly.yml) runs the unit image and then the live script at 06:07 UTC (`7 6 * * *`), and on `workflow_dispatch`. Push and pull-request CI stays in `tests.yml`.
+It never binds host port 3000, 8081, or 18481 to 18495. [`.github/workflows/nightly.yml`](.github/workflows/nightly.yml) runs the unit image and then the live script at 06:07 UTC (`7 6 * * *`), and on `workflow_dispatch`. Push and pull-request CI stays in `tests.yml`.
 
 ## Develop
 

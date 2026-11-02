@@ -6,8 +6,10 @@
 # demo image, so `docker build .` and `docker compose build` do not run it.
 # The demo image compiles the library, then keeps the compiled library, its two runtime dependencies,
 # the demo (Node runs server.ts as it is), and the sources `node scripts/configure-iya-sts.ts` needs.
-# The key pair, the metadata and the IdP's TLS root are NOT in the image. Compose mounts them at
-# /app/demo/generated. The live sign-in mounts a work directory and runs that configure script here.
+# The iya-sts listener CA trust chain IS in the image: idpCa's file, demo/generated/idp-ca.pem, which
+# the install script (scripts/configure-iya-sts.ts) wrote before the build. The key pair and both
+# metadata documents are NOT: compose mounts demo/generated at /app/demo/generated, and the live
+# sign-in mounts them one file each.
 # 24.22.1: the 21 October 2026 security release, which fixes HTTP2Shell / Node2Shell (CVE-2026-111497).
 FROM node:24.22.1-alpine AS test
 WORKDIR /src
@@ -15,6 +17,8 @@ COPY package.json package-lock.json VERSION ./
 COPY packages/wsfed-caep-nodejs/package.json packages/wsfed-caep-nodejs/
 COPY demo/package.json demo/
 RUN npm ci --workspaces --include-workspace-root --ignore-scripts
+# scripts/trust-chain.test.ts makes a four-certificate chain with openssl.
+RUN apk add --no-cache openssl
 COPY packages/wsfed-caep-nodejs packages/wsfed-caep-nodejs
 COPY scripts scripts
 COPY demo/wsfed.json demo/
@@ -38,10 +42,16 @@ COPY packages/wsfed-caep-nodejs/package.json packages/wsfed-caep-nodejs/
 COPY demo/package.json demo/
 RUN npm ci --omit=dev --workspaces --include-workspace-root --ignore-scripts && npm cache clean --force
 COPY --from=build /src/packages/wsfed-caep-nodejs/dist packages/wsfed-caep-nodejs/dist
-COPY demo/server.ts demo/wsfed.json demo/
-COPY demo/public demo/public
-COPY scripts/redirects.mjs scripts/configure-iya-sts.ts scripts/
+COPY scripts/redirects.mjs scripts/trust-chain.mjs scripts/configure-iya-sts.ts scripts/
 COPY packages/wsfed-caep-nodejs/src packages/wsfed-caep-nodejs/src
+# The demo, and with it idpCa's file: demo/generated/idp-ca.pem, the iya-sts listener CA trust chain
+# scripts/configure-iya-sts.ts saved. The image trusts that iya-sts with no bind mount and no fetch.
+# Rebuild after running the install script against a different iya-sts.
+# .dockerignore admits that one file from demo/generated (never the key, the certificate or the
+# metadata), and keeps out node_modules. A COPY of the demo DIRECTORY succeeds with or without the
+# chain, so a fresh clone and CI still build; naming the file, or a glob that matches nothing, fails
+# the build in both builders. It comes last, so a new chain rebuilds nothing else.
+COPY demo demo
 USER node
 EXPOSE 3000
 # PORT defaults to 3000 so a run that does not set it (the CI demo job) is still healthy.

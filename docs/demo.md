@@ -57,7 +57,7 @@ Sign in, then do one of these at iya-sts and watch the demo's tab:
 
 ## The container
 
-`demo/generated/` is mounted read-only at `/app/demo/generated`: the key, the certificate, both metadata documents and iya-sts's TLS root. None of them is in the image.
+The image carries `demo/generated/idp-ca.pem`, the iya-sts listener CA trust chain `idpCa` names, from build time (`COPY demo demo`; `.dockerignore` admits only that file from `demo/generated`). Run `configure-iya-sts` before `docker compose up --build`, and rebuild after running it against a different iya-sts. The key, the certificate and both metadata documents are never in the image: `demo/generated/` is mounted read-only at `/app/demo/generated` for them, which also puts the host's copy of the chain over the image's.
 
 The container uses the **host's network**, so that `https://localhost:8081`, the Shared Signals transmitter the demo's server polls, is the same address inside it as in the browser. On Docker Desktop, turn on host networking (**Settings → Resources → Network**).
 
