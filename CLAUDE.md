@@ -16,7 +16,7 @@ Node.js 22.18 or later. The package engines field says `>=22.18.0`. Continuous i
 |---|---|
 | `packages/wsfed-caep-nodejs` | The library published to npm as `wsfed-caep-nodejs`. Source is `src/` (`relying-party.ts`, `token.ts`, `metadata.ts`, `signature.ts`, `encryption.ts`, `x509.ts`, `ssf/`). Tests and the stub identity provider are `test/`. `examples/node-http.mjs` is the plain-JavaScript sample. `npm run build` writes `dist/`. |
 | `demo` | The server-rendered demo. `demo/server.ts` and `demo/public/`. Config is `demo/wsfed.json`. |
-| `scripts` | `configure-iya-sts.ts` registers the relying party on iya-sts and writes metadata for the realm and reply URL that run registers. `redirects.mjs` rewrites a loopback URL onto `PORT`. `version.mjs` stamps the published version. |
+| `scripts` | `configure-iya-sts.ts` registers the relying party on iya-sts and writes metadata for the realm and reply URL that run registers. It runs with `node` inside the demo image. `live_iya_sts.py` is the host Python live sign-in. `redirects.mjs` rewrites a loopback URL onto `PORT`. `version.mjs` stamps the published version. |
 | `docs` | The GitHub Pages site. |
 | `tools/apidocs` | TypeDoc. It is outside the npm workspace. |
 | `Dockerfile`, `docker-compose.yml` | The demo image. Compose uses host networking. |
@@ -51,6 +51,8 @@ npm run version:check
 
 `npm test` runs `node:test` on the TypeScript sources in `packages/wsfed-caep-nodejs/test` and on `scripts/*.test.ts`. The library tests use the stub identity provider in `test/stub-idp.ts`. `version:check` fails unless every manifest is `M.N.0`.
 
+`docker build --target test .` runs that same `npm test` in the Node image. The test stage is not a parent of the demo image, so `docker build .` and `docker compose build` do not run it. Do not run node or npm on the host for the suite. `.github/workflows/tests.yml` still runs `npm test` on the runner. That file is separate from the nightly workflow.
+
 `.github/workflows/tests.yml` also checks that the built package loads from ESM and `require()`, syntax-checks `examples/node-http.mjs`, and builds the demo image. That image job publishes host port 3000. Do not run it while a demo is already bound there. The in-process commands above do not need the container.
 
 ## Demo
@@ -66,6 +68,12 @@ docker compose up --build
 Open <http://localhost:3000> and sign in as `wsfed-demo-user`.
 
 A loopback realm and reply URL follow `PORT` in the running server and in `scripts/configure-iya-sts.ts`. The metadata file is built from those rewritten values, not from the on-disk `localhost:3000` file alone. Any other host is left as written. An explicit `--public-url` or a non-empty `PUBLIC_URL` replaces the origin and keeps the path. A different port is a different realm, so run `configure-iya-sts` again after changing `PORT`. The previous `:3000` registration stays on iya-sts. `pollIntervalMs` is a millisecond pause, not a port.
+
+`GET /live-status` is JSON: `signedIn`, `subject`, `receiver`, and `events` (`type` and `jti`). No tokens. `python3 scripts/live_iya_sts.py` signs the demo in to a fresh iya-sts and checks that JSON. Configure is `node scripts/configure-iya-sts.ts` inside the demo image. Do not run node or npm on the host for it.
+
+iya-sts main sets the assertion SessionIndex to the assertion id. The CAEP session-revoked subject names the sign-on session, so the index finds nobody. The event handler ends this demo's one session, as wsfed-caep-java does in Demo.java. session-revoked leaves `signedIn` false.
+
+`.github/workflows/nightly.yml` runs `docker build --target test .` and then `python3 scripts/live_iya_sts.py` at 06:07 UTC (`7 6 * * *`), and on `workflow_dispatch`. Do not bind host ports 3000 or 8081.
 
 ## Releases
 

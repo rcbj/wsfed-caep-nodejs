@@ -26,6 +26,7 @@
 //   POST /u/<a>/logout    signs that account out of this application; the others stay
 //   POST /logout          signs every account in this browser out of this application; ?idp=1 then signs
 //                         out at the identity provider too (wa=wsignout1.0)
+//   GET  /live-status     signedIn, subject, receiver, and events of type and jti. No tokens.
 //   GET  /healthz         for the container's health check
 //
 // SHARED SIGNALS: with an `ssf` block, and `signals` not false, the demo is also a CAEP and RISC receiver
@@ -33,7 +34,10 @@
 // with the relying party's own key pair. `"signals": false` turns that off. The receiver is not started,
 // and transmitter metadata is not required, even when `ssf` is present. Sign-in is unchanged. The default
 // is on. An event that revokes a session, or disables, purges or compromises an account, ENDS the matching
-// local sessions here, and their open tabs are told at once.
+// local sessions here, and their open tabs are told at once. iya-sts main sets the assertion SessionIndex
+// to the assertion id. A CAEP session-revoked subject names the sign-on session, so the index finds nobody
+// and onEndSessions is not asked to drop the login. This demo ends its one session from the event handler,
+// as wsfed-caep-java does in Demo.java.
 //
 // Three cookies. `wsfed_pending` holds the outstanding sign-in ids (the `id` in each wctx), HMAC-signed,
 // scoped to the reply URL, and SameSite=None: the identity provider posts the sign-in response from a
@@ -175,6 +179,28 @@ function logFor(sid: string, entry: LoggedEvent): void {
 // THE RECEIVER, started once the service provider is loaded. Its state is shown on the home page.
 let receiver: SignalsReceiver | undefined;
 let receiverState = FILE.signals === false ? 'signals are off' : SSF ? 'starting' : 'not configured (no ssf block in the configuration file)';
+/** Accepted events for GET /live-status: type and jti only. No tokens. */
+const liveEvents: Array<{ type: string; jti: string }> = [];
+
+async function remember(event: SignalEvent): Promise<void> {
+  liveEvents.push({ type: event.type, jti: event.jti ?? '' });
+  // iya-sts main sets the WS-Federation assertion SessionIndex to the assertion id.
+  // The CAEP session-revoked subject names the sign-on session, so the index finds
+  // nobody and onEndSessions is not asked to drop this login. This demo ends its
+  // one session here, as wsfed-caep-java does in Demo.java.
+  if (event.type !== EVENT.sessionRevoked || event.sessions.length > 0) return;
+  const ids = [...sessions.keys()];
+  for (const sid of ids) {
+    endSession(sid);
+    tell(sid, 'signed-out', {
+      type: shortType(event.type),
+      reason: event.payload.reason_user ?? event.payload.reason_admin ?? event.payload.reason ?? null,
+    });
+    await receiver?.untrack(sid);
+  }
+  if (ids.length) console.log(`ssf: session-revoked matched no session index; ended ${ids.length} local session(s)`);
+}
+
 function startReceiver(rp: RelyingParty): void {
   // Omitted means on. Do not start a receiver, or read transmitter metadata, when signals is false.
   if (rp.config.signals === false) {
@@ -202,7 +228,8 @@ function startReceiver(rp: RelyingParty): void {
       console.log(`ssf: ${shortType(event.type)} ended ${ids.length} local session(s)`);
     },
   });
-  r.on('*', (event: SignalEvent) => {
+  r.on('*', async (event: SignalEvent) => {
+    await remember(event);
     const entry: LoggedEvent = {
       id: ++sequence,
       at: new Date().toISOString(),
@@ -485,6 +512,16 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const method = req.method ?? 'GET';
 
   if (url.pathname === '/healthz') return send(res, 200, 'ok', { 'content-type': 'text/plain' });
+  if (url.pathname === '/live-status' && method === 'GET') {
+    const who = accountsOf(req)[0]?.session.login;
+    const body = {
+      signedIn: Boolean(who),
+      subject: who?.nameId ?? null,
+      receiver: receiverState,
+      events: liveEvents.map((event) => ({ type: event.type, jti: event.jti })),
+    };
+    return send(res, 200, JSON.stringify(body), { 'content-type': 'application/json', 'cache-control': 'no-store' });
+  }
   if (url.pathname === '/styles.css') return send(res, 200, STYLES, { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'max-age=300' });
   if (url.pathname === '/app.js') return send(res, 200, APP_JS, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'max-age=300' });
 
