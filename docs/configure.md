@@ -25,7 +25,7 @@ ADMIN_API_CLIENT_SECRET=… npm run configure-iya-sts
    - `POST /admin-api/tls/trust/add`: the RP certificate as a client trust anchor;
    - `POST /admin-api/applications/add-certificate` (iya-sts #1227): the certificate stored on the application entry, which makes a handshake presenting it this application at `/ssf/*`.
 6. **Fetches iya-sts's metadata for this relying party**, `/wsfed/metadata/<realm>`, checks it with the library's own reader, and saves it where `idpMetadata` points.
-7. **Creates a test user**, `wsfed-demo-user`. Its password is `WSFED_DEMO_USER_PASSWORD`, or one is generated and printed once. With `WSFED_DEMO_USER_PASSWORD` set, an existing user's password is replaced.
+7. **Creates a test user**, `wsfed-demo-user`. Its password is `WSFED_DEMO_USER_PASSWORD`, or iya-sts generates one; the script writes a generated one to `demo/generated/wsfed-demo-user.password` (created mode 0600) and prints only that path, never the password. With `WSFED_DEMO_USER_PASSWORD` set, an existing user's password is replaced.
 
 Every step can be run again.
 

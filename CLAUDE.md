@@ -65,7 +65,7 @@ ADMIN_API_CLIENT_SECRET=… WSFED_DEMO_USER_PASSWORD=… npm run configure-iya-s
 docker compose up --build
 ```
 
-Open <http://localhost:3000> and sign in as `wsfed-demo-user`.
+Open <http://localhost:3000> and sign in as `wsfed-demo-user`. Unless `WSFED_DEMO_USER_PASSWORD` sets its password, iya-sts generates one, and the install script writes it to `demo/generated/wsfed-demo-user.password` (created mode 0600) and prints only that path, never the password.
 
 A loopback realm and reply URL follow `PORT` in the running server and in `scripts/configure-iya-sts.ts`. The metadata file is built from those rewritten values, not from the on-disk `localhost:3000` file alone. Any other host is left as written. An explicit `--public-url` or a non-empty `PUBLIC_URL` replaces the origin and keeps the path. A different port is a different realm, so run `configure-iya-sts` again after changing `PORT`. The previous `:3000` registration stays on iya-sts. `pollIntervalMs` is a millisecond pause, not a port.
 
