@@ -58,7 +58,7 @@ import { send } from '../packages/wsfed-caep-nodejs/src/http.ts';
 import { readIdpMetadata } from '../packages/wsfed-caep-nodejs/src/metadata.ts';
 import { RelyingParty } from '../packages/wsfed-caep-nodejs/src/relying-party.ts';
 import { demoPort, endpointsFor } from './redirects.mjs';
-import { saveTrustChain } from './trust-chain.mjs';
+import { saveTrustChain, trustNote } from './trust-chain.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -366,6 +366,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
   if (files.idpCa) {
     const chain = await saveTrustChain(origin, files.idpCa);
     console.log(`Saved ${origin}'s listener CA trust chain (${chain.count} certificate(s)) to ${chain.path}:`);
+    console.log(`  ${trustNote(chain)}`);
     console.log(`  trust anchor ${chain.anchor.subject.replace(/\n/g, ', ')}`);
     console.log(`  sha256 ${chain.anchor.fingerprint256}`);
     console.log('  Compare the anchor with the Root CA on iya-sts\'s Server configuration → PKI page.');
