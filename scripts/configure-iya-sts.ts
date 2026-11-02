@@ -7,9 +7,13 @@
  *   1. the relying party's key pair, if the files the configuration names do not exist yet (the same as
  *      `npm run generate-keys`). WS-Federation signs nothing; the key is the Shared Signals receiver's TLS
  *      client certificate, and what an identity provider that encrypts would encrypt to;
- *   2. the identity provider's TLS root, if the configuration's `idpCa` file does not exist yet: taken
- *      from the TLS handshake (trust on first use) and its fingerprint printed, for you to compare with
- *      iya-sts's Server configuration → PKI page;
+ *   2. the iya-sts TLS listener CA trust chain, on every run, written whole to the file the
+ *      configuration's `idpCa` names: the chain iya-sts publishes at `GET /tls/server-certificate`
+ *      (leaf, TLS Issuing CA, Intermediate, Root), or the chain the TLS handshake presents when that
+ *      path does not answer (scripts/trust-chain.mjs). That first fetch is not verified (trust on
+ *      first use); the anchor's subject and SHA-256 fingerprint are printed, for you to compare with
+ *      iya-sts's Server configuration → PKI page. The demo image build copies that file in, so
+ *      rebuild the image after running this against a different iya-sts;
  *   3. this relying party's federation METADATA, from the configuration's certificate when it has
  *      one, with the realm and reply URL this run registers (a loopback pair follows PORT), written
  *      to demo/generated/rp-metadata.xml for an identity provider that reads one, and the relying party
@@ -44,10 +48,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { X509Certificate } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
-import { connect, type PeerCertificate } from 'node:tls';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { main as cli } from '../packages/wsfed-caep-nodejs/src/cli.ts';
 import { resolveConfig, type WsFedConfig } from '../packages/wsfed-caep-nodejs/src/config.ts';
@@ -55,6 +57,7 @@ import { send } from '../packages/wsfed-caep-nodejs/src/http.ts';
 import { readIdpMetadata } from '../packages/wsfed-caep-nodejs/src/metadata.ts';
 import { RelyingParty } from '../packages/wsfed-caep-nodejs/src/relying-party.ts';
 import { demoPort, endpointsFor } from './redirects.mjs';
+import { saveTrustChain } from './trust-chain.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -237,20 +240,6 @@ export function ssfCalls(files: DemoFiles, base: string, certificatePem: string)
   ];
 }
 
-/** The root of the chain the server presents, taken from the handshake without verifying it. */
-function fetchTlsRoot(origin: string): Promise<X509Certificate> {
-  const u = new URL(origin);
-  return new Promise((resolvePromise, reject) => {
-    const socket = connect({ host: u.hostname, port: Number(u.port || 443), servername: u.hostname, rejectUnauthorized: false }, () => {
-      let cert = socket.getPeerCertificate(true) as PeerCertificate & { issuerCertificate?: PeerCertificate };
-      while (cert.issuerCertificate && cert.issuerCertificate !== cert && cert.issuerCertificate.raw) cert = cert.issuerCertificate;
-      socket.end();
-      resolvePromise(new X509Certificate(cert.raw));
-    });
-    socket.on('error', reject);
-  });
-}
-
 async function json(url: string, ca: string | undefined, init: { method?: string; headers?: Record<string, string>; body?: string }) {
   const tls = ca ? { ca } : {};
   const answer = await send(url, init, tls, 'config');
@@ -328,7 +317,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
 
   if (args.dryRun) {
     if (!existsSync(files.key)) console.log(`# would generate the key pair ${files.key}, ${files.cert}`);
-    if (files.idpCa && !existsSync(files.idpCa)) console.log(`# would save ${origin}'s TLS root to ${files.idpCa}`);
+    if (files.idpCa) console.log(`# would save ${origin}'s listener CA trust chain to ${files.idpCa}`);
     console.log(`# would write ${files.rpMetadata}`);
     for (const c of planFor(files, base, args.testUser)) {
       console.log(`${c.method} ${c.path}  # ${c.why}${c.body ? `\n${JSON.stringify(c.body, null, 2)}` : ''}`);
@@ -342,17 +331,15 @@ export async function main(argv: readonly string[] = process.argv.slice(2)): Pro
     await cli(['generate-keys', '--config', args.config]);
   }
 
-  // 2. The IdP's TLS root, trusted on first use.
+  // 2. The listener CA trust chain, written whole to idpCa's file on every run (trust on first use).
   let ca: string | undefined;
   if (files.idpCa) {
-    if (!existsSync(files.idpCa)) {
-      const root = await fetchTlsRoot(origin);
-      mkdirSync(dirname(files.idpCa), { recursive: true });
-      writeFileSync(files.idpCa, root.toString());
-      console.log(`Saved ${origin}'s TLS root to ${files.idpCa} (trusted on first use):`);
-      console.log(`  ${root.subject.replace(/\n/g, ', ')}\n  sha256 ${root.fingerprint256}`);
-      console.log('  Compare it with the Root CA on iya-sts\'s Server configuration → PKI page.');
-    }
+    const chain = await saveTrustChain(origin, files.idpCa);
+    console.log(`Saved ${origin}'s listener CA trust chain (${chain.count} certificate(s)) to ${chain.path}:`);
+    console.log(`  trust anchor ${chain.anchor.subject.replace(/\n/g, ', ')}`);
+    console.log(`  sha256 ${chain.anchor.fingerprint256}`);
+    console.log('  Compare the anchor with the Root CA on iya-sts\'s Server configuration → PKI page.');
+    console.log('  The demo image build copies that trust chain in. Rebuild it after running this against another iya-sts.');
     ca = readFileSync(files.idpCa, 'utf8');
   }
 
