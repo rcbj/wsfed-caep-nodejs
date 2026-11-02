@@ -30,6 +30,20 @@ docker compose up --build
 
 Open <http://localhost:3000> and sign in as `wsfed-demo-user`. See [Running the demo](docs/demo.md) and [Setting up iya-sts](docs/configure.md).
 
+## Live sign-in
+
+The unit suite is one image. It does not run as part of `docker build .` or `docker compose build`.
+
+```sh
+docker build --target test .
+```
+
+`python3 scripts/live_iya_sts.py` is the live half, on the host's Python. It starts a fresh iya-sts in memory mode unless `IYA_STS_URL` is already set, builds the demo image, and runs `node scripts/configure-iya-sts.ts` inside that image. Do not run node or npm on the host. The script signs in, emits credential-change, then session-revoked, and requires `GET /live-status` to show both. That JSON is `signedIn`, `subject`, `receiver`, and `events` of `type` and `jti`. It has no tokens. session-revoked leaves `signedIn` false.
+
+iya-sts main sets the WS-Federation assertion SessionIndex to the assertion id. The CAEP session-revoked subject names the sign-on session, so the index finds nobody. The demo ends its one session from the event handler, as the Java demo does in `Demo.java`.
+
+Do not bind host ports 3000 or 8081. [`.github/workflows/nightly.yml`](.github/workflows/nightly.yml) runs the unit image and then the live script at 06:07 UTC (`7 6 * * *`), and on `workflow_dispatch`. Push and pull-request CI stays in `tests.yml`.
+
 ## Develop
 
 ```sh
