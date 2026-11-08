@@ -11,7 +11,7 @@
 # metadata documents are NOT: compose mounts demo/generated at /app/demo/generated, and the live
 # sign-in mounts them one file each.
 # 24.22.1: the 21 October 2026 security release, which fixes HTTP2Shell / Node2Shell (CVE-2026-111497).
-FROM node:24.22.1-alpine AS test
+FROM node:26.12.1-alpine AS test
 WORKDIR /src
 COPY package.json package-lock.json VERSION ./
 COPY packages/wsfed-caep-nodejs/package.json packages/wsfed-caep-nodejs/
@@ -24,7 +24,7 @@ COPY scripts scripts
 COPY demo/wsfed.json demo/
 RUN npm test
 
-FROM node:24.22.1-alpine AS build
+FROM node:26.12.1-alpine AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
 COPY packages/wsfed-caep-nodejs/package.json packages/wsfed-caep-nodejs/
@@ -34,7 +34,7 @@ COPY packages/wsfed-caep-nodejs/tsconfig.json packages/wsfed-caep-nodejs/
 COPY packages/wsfed-caep-nodejs/src packages/wsfed-caep-nodejs/src
 RUN npm run build -w packages/wsfed-caep-nodejs
 
-FROM node:24.22.1-alpine
+FROM node:26.12.1-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
